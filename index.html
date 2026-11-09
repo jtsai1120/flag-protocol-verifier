@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flag protocol verifier</title>
+<meta name="description" content="Checks whether a flag fault-tolerant error-correction protocol written in FPDL is actually fault tolerant, using SPBDD decision diagrams over Pauli sets. Runs in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="bar">
+  <a class="home" href="./">Flag protocol verifier</a>
+  <nav aria-label="Sections">
+    <a class="sec" href="#checks">What it checks</a>
+    <a class="sec" href="#example">Example</a>
+    <a class="sec" href="#start">Get started</a>
+    <a class="sec" href="#how">How it works</a>
+    <a class="sec" href="#formats">Formats</a>
+    <a class="sec" href="#protocols">Protocols</a>
+    <a href="playground/">Playground</a>
+    <a href="spbdd/">SPBDD playground</a>
+  </nav>
+  <a class="gh" href="https://github.com/jtsai1120/flag-protocol-verifier">GitHub</a>
+</header>
+<main id="main">
+<div class="wrap">
+
+<section class="hero">
+  <div>
+    <h1>Flag protocol verifier</h1>
+    <p class="lede">Give it a flag fault-tolerant error-correction protocol. It checks whether any run with up to ⌊(d−1)/2⌋ faults leaves the decoder unable to correct the error.</p>
+    <div class="actions">
+      <a class="btn primary" href="playground/">Try it in your browser</a>
+      <a class="btn" href="#start">Get started</a>
+      <a class="btn" href="https://github.com/jtsai1120/flag-protocol-verifier">View on GitHub</a>
+    </div>
+  </div>
+  <figure class="figure">
+    <svg class="circuit" viewBox="0 0 560 285" role="img" aria-labelledby="circ-t">
+<title id="circ-t">A weight-4 Z check measured with one syndrome qubit and one flag qubit</title>
+<text class="lbl" x="8" y="45">d1</text><line class="wire" x1="58" y1="40" x2="540" y2="40"/>
+<text class="lbl" x="8" y="85">d2</text><line class="wire" x1="58" y1="80" x2="540" y2="80"/>
+<text class="lbl" x="8" y="125">d3</text><line class="wire" x1="58" y1="120" x2="540" y2="120"/>
+<text class="lbl" x="8" y="165">d4</text><line class="wire" x1="58" y1="160" x2="540" y2="160"/>
+<text class="lbl" x="8" y="215">s</text><text class="lbl" x="22" y="215">|+⟩</text><line class="wire" x1="58" y1="210" x2="490" y2="210"/>
+<text class="lbl" x="8" y="260">f</text><text class="lbl" x="22" y="260">|0⟩</text><line class="wire" x1="58" y1="255" x2="490" y2="255"/>
+<line class="link" x1="110" y1="53" x2="110" y2="210"/><circle class="ctl" cx="110" cy="210" r="4.5"/>
+<rect class="gate-z" x="97" y="27" width="26" height="26" rx="2"/><text class="gate-z-t" x="110" y="45" text-anchor="middle">Z</text>
+<line class="flaglink" x1="170" y1="210" x2="170" y2="265"/><circle class="flagdot" cx="170" cy="210" r="4.5"/>
+<circle class="flag" cx="170" cy="255" r="10"/><line class="flaglink" x1="160" y1="255" x2="180" y2="255"/>
+<line class="link" x1="230" y1="93" x2="230" y2="210"/><circle class="ctl" cx="230" cy="210" r="4.5"/>
+<rect class="gate-z" x="217" y="67" width="26" height="26" rx="2"/><text class="gate-z-t" x="230" y="85" text-anchor="middle">Z</text>
+<line class="link" x1="290" y1="133" x2="290" y2="210"/><circle class="ctl" cx="290" cy="210" r="4.5"/>
+<rect class="gate-z" x="277" y="107" width="26" height="26" rx="2"/><text class="gate-z-t" x="290" y="125" text-anchor="middle">Z</text>
+<line class="flaglink" x1="350" y1="210" x2="350" y2="265"/><circle class="flagdot" cx="350" cy="210" r="4.5"/>
+<circle class="flag" cx="350" cy="255" r="10"/><line class="flaglink" x1="340" y1="255" x2="360" y2="255"/>
+<line class="link" x1="410" y1="173" x2="410" y2="210"/><circle class="ctl" cx="410" cy="210" r="4.5"/>
+<rect class="gate-z" x="397" y="147" width="26" height="26" rx="2"/><text class="gate-z-t" x="410" y="165" text-anchor="middle">Z</text>
+<rect class="meter" x="490" y="196" width="40" height="28" rx="2"/><text class="meter-t" x="510" y="214" text-anchor="middle">Mx</text>
+<rect class="meter" x="490" y="241" width="40" height="28" rx="2"/><text class="meter-t" x="510" y="259" text-anchor="middle">Mz</text>
+</svg>
+    <figcaption>A weight-4 Z check with one flag qubit, the circuit of Chamberland &amp; Beverland’s Fig.&nbsp;2(b). A fault on <span class="mono">s</span> between the two flag couplings spreads to two data qubits and raises the flag.</figcaption>
+    <div class="verdict" aria-label="Verifier output for LL25 [[5,1,3]] [2,2]^T">1 unprotected path(s); first failure at t = 1
+
+  path 1  t=1  record=0001,01|0011
+        <span class="x">IIZIX and IZIIZ share syndrome 0001 but differ logically (01 vs 11)</span></div>
+  </figure>
+</section>
+
+<section class="doc" id="checks">
+  <div class="doc-grid">
+    <h2>What it checks</h2>
+    <div class="doc-body">
+      <p>A flag protocol measures stabilizers with circuits that use extra flag qubits. It then decides adaptively, from the syndromes and flags it has seen, when to stop and what to decode. The protocol is fault tolerant if every run with at most <i>t</i> = ⌊(<i>d</i>−1)/2⌋ faults ends in a state the decoder can correct.</p>
+      <p>The verifier tests exactly that. For every execution path of the protocol and every measurement record along it, it builds the set of data errors that up to <i>t</i> faults can leave behind. It then asks whether that set holds two errors <i>E</i><sub>1</sub>, <i>E</i><sub>2</sub> that the record cannot tell apart, yet whose product <i>E</i><sub>1</sub><i>E</i><sub>2</sub> is a non-trivial logical operator, an element of <i>N</i>(<i>S</i>)∖<i>S</i>. Such a pair means correcting one error damages the encoded state under the other. If no reachable set contains such a pair, the protocol is fault tolerant.</p>
+      <p>Every two-qubit gate is a fault location, where a fault is any Pauli on the gate’s two qubits. Single-qubit gates, preparations and measurements are taken as fault free, which is the model these protocols assume. Error sets are kept as decision diagrams through <a href="https://github.com/fmlab-iis/spbdd">SPBDD</a>, so the verifier never lists errors one by one.</p>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="example">
+  <div class="doc-grid">
+    <h2>A worked example</h2>
+    <div class="doc-body">
+      <p>The flag-sharing protocol for the [[5,1,3]] code from Liou &amp; Lai (arXiv:2407.00607), in its fully parallel [2,2]<sup>T</sup> arrangement, runs one flagged extraction round. It stops if nothing fires; otherwise it runs one unflagged round and decodes from all three results:</p>
+<pre><code>af:
+    while(!tc) {
+        (m,f) = FSE_f();
+    }
+
+tp:
+    1: { end(); }
+    2: {
+        bit[4] mp = ⊥;
+        (mp,) = FSE_b();
+        decode(mr[m, f, mp]);
+    }</code></pre>
+      <p>Verifying it finds one record that breaks the protocol:</p>
+<pre><code>$ ./build/ftec-verify "protocols/LL25_[[5,1,3]]_[2,2]^T/LL25_[[5,1,3]]_[2,2]^T.fpdl"
+protocol        : LL25_[[5,1,3]]_[2,2]^T
+code            : [[5,1,3]], tau = 1
+paths reached   : 2 of 2
+records reached : 153
+circuits run    : 36
+
+1 unprotected path(s); first failure at t = 1
+
+  path 1  t=1  record=0001,01|0011
+        IIZIX and IZIIZ share syndrome 0001 but differ logically (01 vs 11)</code></pre>
+      <p>Read the record left to right: the flagged round measured syndrome <code>0001</code> with flags <code>01</code>, and the unflagged round measured <code>0011</code>. A single fault can produce this record with either <code>IIZIX</code> or <code>IZIIZ</code> on the data. The two errors differ by a logical operator, so whichever one the decoder corrects, the other one is left as a logical error. The same protocol in its non-transposed [2,2] arrangement fails on four records; the [1,1,1,1]<sup>T</sup> arrangement passes.</p>
+      <p><a href="playground/?p=LL25_%5B%5B5,1,3%5D%5D_%5B2,2%5D%5ET">Run this example in the playground</a>.</p>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="start">
+  <div class="doc-grid">
+    <h2>Get started</h2>
+    <div class="doc-body">
+      <p>You need <code>g++</code> with C++20, <code>make</code> and <code>git</code>. Nothing else is installed system-wide: the build fetches SPBDD, and SPBDD fetches BuDDy.</p>
+      <ol class="steps">
+        <li>
+          <h3>Clone the repository</h3>
+<pre><code>git clone https://github.com/jtsai1120/flag-protocol-verifier
+cd flag-protocol-verifier</code></pre>
+        </li>
+        <li>
+          <h3>Build</h3>
+          <p><code>make</code> fetches <a href="https://github.com/fmlab-iis/spbdd">fmlab-iis/spbdd</a> at a pinned commit and builds it with its own Makefile. It keeps only <code>libspbdd.a</code> (BuDDy included) and the public headers under <code>third_party/spbdd/</code>, then builds <code>build/ftec-verify</code>.</p>
+<pre><code>make</code></pre>
+        </li>
+        <li>
+          <h3>Test</h3>
+          <p>This parses every protocol and circuit. It then verifies each distance-3 protocol with all four E1E2 methods and compares the verdicts against the recorded ones.</p>
+<pre><code>make check</code></pre>
+        </li>
+        <li>
+          <h3>Verify a protocol</h3>
+<pre><code>./build/ftec-verify "protocols/CR17_[[5,1,3]]/CR17_[[5,1,3]].fpdl"
+./build/ftec-verify "protocols/CB18_[[17,1,5]]_plain/CB18_[[17,1,5]]_plain.fpdl" --fqcv=table</code></pre>
+        </li>
+      </ol>
+      <h3>Options</h3>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Option</th><th>Default</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td><code>--fqcv=METHOD</code></td><td><code>image</code></td><td>How the final E1E2 query is answered: <code>bruteforce</code>, <code>table</code>, <code>image</code> or <code>square</code>. All four give the same verdict.</td></tr>
+          <tr><td><code>--bound=N</code></td><td>searched</td><td>Fix the bounded-model-checking bound. Without it, the bound doubles from 16 until the symbolic expansion is complete.</td></tr>
+          <tr><td><code>--max-paths=N</code></td><td><code>5000</code></td><td>Give up past this many symbolic paths.</td></tr>
+          <tr><td><code>--first</code></td><td>off</td><td>Stop at the first unprotected path.</td></tr>
+          <tr><td><code>--dag</code></td><td>off</td><td>Print the merged path structure and exit without verifying.</td></tr>
+        </tbody>
+      </table></div>
+      <p>To build against another SPBDD, use <code>make SPBDD_REF=&lt;commit&gt;</code> after <code>make distclean</code>, or <code>make SPBDD_SRC=/path/to/spbdd</code> to use a checkout as it is.</p>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="how">
+  <div class="doc-grid">
+    <h2>How it works</h2>
+    <div class="doc-body">
+      <h3>Paths become a trie</h3>
+      <p>The FPDL front end expands the protocol symbolically into every path its control flow allows. It doubles the bound until no path is cut short, and checks that the terminal conditions are mutually exclusive. Paths share long prefixes, so they are merged into a trie and walked depth first. Each extraction circuit then runs once per prefix instead of once per path, and only the states on the current root-to-node chain are alive.</p>
+      <h3>States are families of Pauli sets</h3>
+      <p>A state is the family of error sets indexed by fault count 0…<i>t</i>. Running a circuit propagates every set through its gates. At each two-qubit gate, the fault-<i>k</i> set spawns into the fault-(<i>k</i>+1) set, and each measurement splits the state by outcome. Two outcomes are different records, so they never merge. A repeated state is recognised by its diagram’s root node and its result reused.</p>
+      <h3>The final E1E2 query</h3>
+      <p>At each terminal, SPBDD’s <code>code::find_qec_cond_violation</code> looks for two errors with the same syndrome whose product lies in <i>N</i>(<i>S</i>)∖<i>S</i>. It offers four ways to answer, with identical verdicts and different costs:</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Method</th><th>How</th></tr></thead>
+        <tbody>
+          <tr><td><code>bruteforce</code></td><td>Enumerate the error set and multiply every pair.</td></tr>
+          <tr><td><code>table</code></td><td>Enumerate the set once, keyed by syndrome.</td></tr>
+          <tr><td><code>image</code></td><td>Dynamic programming over the layers of the set’s diagram.</td></tr>
+          <tr><td><code>square</code></td><td>Build <i>E</i>·<i>E</i> and intersect it with <i>N</i>(<i>S</i>)∖<i>S</i>, which is built once per code.</td></tr>
+        </tbody>
+      </table></div>
+      <p>The query is cheap; propagation is not. On the generated CB18 protocols below, the final query takes about half a percent of the run.</p>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="formats">
+  <div class="doc-grid">
+    <h2>Formats</h2>
+    <div class="doc-body">
+      <p>A protocol is a directory with one <code>.fpdl</code> file and the OpenQASM circuits it refers to. Relative paths in the <code>.fpdl</code> resolve against its own directory.</p>
+      <h3>.fpdl — the protocol</h3>
+      <p>FPDL, the Flag Protocol Description Language, describes a protocol in six blocks:</p>
+      <div class="table-scroll"><table>
+        <tbody>
+          <tr><td><code>code</code></td><td><code>[[n,k,d]]</code> and the stabilizer generators, dense (<code>[X,Z,Z,X,I]</code>) or sparse (<code>[X3, X4, X5, X6]</code>, one-based).</td></tr>
+          <tr><td><code>se</code></td><td>The extraction circuits: QASM file, data / syndrome / flag registers (<code>qd</code>, <code>qm</code>, <code>qf</code>), the generators measured (<code>g</code>), and for flagged circuits the <code>#-flag</code> claim.</td></tr>
+          <tr><td><code>gvar</code></td><td>Global variables: counters, bit vectors that start as <code>⊥</code>, and measurement records <code>mr</code>.</td></tr>
+          <tr><td><code>tc</code></td><td>Numbered terminal conditions. They must be mutually exclusive.</td></tr>
+          <tr><td><code>af</code></td><td>The adaptive flow: rounds of extraction calls such as <code>(s, f) = FSE_f();</code> and the updates between them.</td></tr>
+          <tr><td><code>tp</code></td><td>One terminating policy per terminal condition, ending in <code>decode(...)</code> or <code>end()</code>.</td></tr>
+        </tbody>
+      </table></div>
+<pre><code>protocol CB18_[[25,1,5]]_gen:
+    code:
+        [[25,1,5]]
+        [[Z1, Z6], [Z2, Z3, Z7, Z8], ...]
+    se:
+        FSE_f {
+            file: "./FSE_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[Z1, Z6], [Z2, Z3, Z7, Z8], ...]
+            #-flag: 2
+        }
+    ...
+    tc:
+        1: ((n_c_same == 3 - n_diff - 1 and n_c_same != 0) and n_flag == 0)
+        2: (n_diff == 2 and n_flag == 0)
+        ...</code></pre>
+      <p>The full grammar, typing rules and static checks are in <a href="https://github.com/jtsai1120/flag-protocol-verifier/blob/main/docs/FPDL.md">docs/FPDL.md</a>.</p>
+      <h3>.qasm — the circuits</h3>
+      <p>OpenQASM 3.0 with the Clifford gates the error model needs:</p>
+      <div class="pills"><span class="pill">id</span><span class="pill">x</span><span class="pill">y</span><span class="pill">z</span><span class="pill">h</span><span class="pill">s</span><span class="pill">sdg</span><span class="pill">cx</span><span class="pill">cy</span><span class="pill">cz</span><span class="pill">reset</span><span class="pill">measure</span><span class="pill">barrier</span><span class="pill">gate (inlined)</span></div>
+      <p>Declare <code>qubit</code> and <code>bit</code> registers. A measurement such as <code>m[0] = measure syn;</code> binds the classical bit to the qubit it reads, so the verifier finds the syndrome and flag records from the registers named in <code>qm</code> and <code>qf</code>.</p>
+<pre><code>// g0 = Z2 Z3 Z7 Z8; flag f0.
+reset syn; h syn; reset flag;
+cz syn,data[1]; cx syn,flag; cz syn,data[2];
+cz syn,data[6]; cx syn,flag; cz syn,data[7];
+h syn; m[1]=measure syn; f[0]=measure flag;</code></pre>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="protocols">
+  <div class="doc-grid">
+    <h2>Protocols</h2>
+    <div class="doc-body">
+      <p>The repository ships protocols from five papers, all runnable in the playground:</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Source</th><th>Codes</th></tr></thead>
+        <tbody>
+          <tr><td>Chao &amp; Reichardt (CR17)</td><td>[[5,1,3]]</td></tr>
+          <tr><td>Chamberland &amp; Beverland (CB18)</td><td>[[17,1,5]], [[25,1,5]], and generated surface-code protocols</td></tr>
+          <tr><td>Bhatnagar et al. (Bha23)</td><td>[[5,1,3]], [[7,1,3]]</td></tr>
+          <tr><td>Du et al. (Du24)</td><td>[[17,1,5]], [[19,1,5]]</td></tr>
+          <tr><td>Liou &amp; Lai, arXiv:2407.00607 (LL25)</td><td>[[5,1,3]], [[17,1,5]], [[19,1,5]], several flag-sharing arrangements</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Generating larger CB18 protocols</h3>
+      <p><code>tools/gen_cb18_surface.py</code> writes the general <i>t</i>-fault-tolerant protocol of Chamberland &amp; Beverland, Section 3, for a rotated surface code. It produces both the FPDL file and the circuits, for a square <i>d</i>×<i>d</i> lattice or a rectangular <i>d</i>×<i>C</i> one. At <i>d</i>=5 its output is identical to the hand-written [[25,1,5]] protocol.</p>
+<pre><code>tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]] on a 5×9 lattice
+tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]</code></pre>
+      <p>Native run times on 2 vCPU, before the final query and for each method of it:</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Protocol</th><th class="num">Before E1E2</th><th class="num">table</th><th class="num">image</th><th class="num">square</th><th class="num">Peak memory</th></tr></thead>
+        <tbody>
+          <tr><td>CB18 [[25,1,5]]</td><td class="num">201–210 s</td><td class="num">0.96 s</td><td class="num">1.85 s</td><td class="num">1.65 s</td><td class="num">157 MiB</td></tr>
+          <tr><td>CB18 [[35,1,5]], 5×7</td><td class="num">741–762 s</td><td class="num">3.22 s</td><td class="num">4.45 s</td><td class="num">4.90 s</td><td class="num">331 MiB</td></tr>
+          <tr><td>CB18 [[45,1,5]], 5×9</td><td class="num">2215–2238 s</td><td class="num">7.81 s</td><td class="num">10.47 s</td><td class="num">12.91 s</td><td class="num">601 MiB</td></tr>
+          <tr><td>CB18 [[49,1,7]]</td><td class="num">over 2000 s</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+        </tbody>
+      </table></div>
+      <p>All three finished protocols are fault tolerant. The syndrome is packed into 64 bits, so codes with more than 65 qubits need that changed first.</p>
+    </div>
+  </div>
+</section>
+
+<section class="doc" id="play">
+  <div class="doc-grid">
+    <h2>Playgrounds</h2>
+    <div class="doc-body">
+      <p>Both tools run in your browser as WebAssembly, compiled from the same sources as the native build. Nothing is uploaded.</p>
+      <h3><a href="playground/">Verifier playground</a></h3>
+      <p>Pick any bundled protocol or add your own <code>.fpdl</code> and <code>.qasm</code> files, edit them, and verify. Distance-3 protocols finish instantly. The distance-5 ones run for several minutes, about two and a half times their native time.</p>
+      <h3><a href="spbdd/">SPBDD playground</a></h3>
+      <p>Write JavaScript against SPBDD’s API: build Pauli sets, push them through Clifford gates, inject faults, define a stabilizer code and ask for a QEC-condition violation. Examples are included.</p>
+    </div>
+  </div>
+</section>
+
+</div>
+</main>
+<footer class="site">
+  <a href="#main">Back to top</a>
+  <a href="https://github.com/jtsai1120/flag-protocol-verifier">Source</a>
+  <a href="https://github.com/jtsai1120/flag-protocol-verifier/issues">Issues</a>
+  <a href="https://github.com/fmlab-iis/spbdd">SPBDD</a>
+  <span>Newsreader and IBM Plex Mono, SIL Open Font License.</span>
+</footer>
+</body>
+</html>

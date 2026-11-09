@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verifier playground</title>
+<meta name="description" content="Run the flag protocol verifier in your browser on the bundled protocols or your own FPDL and QASM files.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+</head>
+<body class="app">
+<header class="bar">
+  <a class="home" href="../">Flag protocol verifier</a>
+  <nav aria-label="Site">
+    <a href="../#formats">Formats</a>
+    <a href="./" aria-current="page">Playground</a>
+    <a href="../spbdd/">SPBDD playground</a>
+  </nav>
+  <a class="gh" href="https://github.com/jtsai1120/flag-protocol-verifier">GitHub</a>
+</header>
+
+<main class="app-main" id="main">
+  <aside class="pane" aria-label="Protocols">
+    <div class="pane-head">
+      <h2>Protocols</h2>
+      <span class="spacer"></span>
+      <button class="small-btn" id="new-protocol" type="button" title="Start an empty protocol of your own">New</button>
+    </div>
+    <div class="plist" id="plist"><p class="notice">Loading protocols…</p></div>
+  </aside>
+
+  <section class="pane" aria-label="Files">
+    <div class="pane-head">
+      <h2 id="ws-title">—</h2>
+      <span class="spacer"></span>
+      <label class="small-btn" for="add-files" title="Add .fpdl and .qasm files from your computer">Add files</label>
+      <input id="add-files" type="file" multiple accept=".fpdl,.qasm,.txt" hidden>
+      <button class="small-btn" id="new-file" type="button">New file</button>
+      <button class="small-btn" id="reset" type="button" title="Discard your edits to this protocol">Reset</button>
+    </div>
+    <div class="tabs" id="tabs" role="tablist" aria-label="Files of this protocol"></div>
+    <textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="File contents"></textarea>
+    <div class="controls">
+      <label>Entry <select id="entry" aria-label="Protocol file to verify"></select></label>
+      <label>E1E2 method
+        <select id="fqcv">
+          <option>image</option><option>table</option><option>square</option><option>bruteforce</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="first"> Stop at first failure</label>
+      <label><input type="checkbox" id="dag"> Structure only</label>
+      <label>Bound <input type="number" id="bound" min="1" placeholder="auto"></label>
+      <label>Max paths <input type="number" id="max-paths" min="1" value="5000"></label>
+    </div>
+    <p class="notice" id="estimate"></p>
+  </section>
+
+  <section class="pane out" aria-label="Output">
+    <div class="pane-head">
+      <button class="run" id="run" type="button" disabled>Verify</button>
+      <button class="stop" id="stop" type="button" disabled>Stop</button>
+      <span class="status" id="status" role="status">Loading the verifier…</span>
+    </div>
+    <pre class="console" id="console" aria-live="polite"></pre>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
