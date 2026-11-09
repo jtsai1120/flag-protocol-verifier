@@ -1,0 +1,7 @@
+/build/
+/third_party/
+*.paths.json
+*.dag.json
+._*
+.DS_Store
+__pycache__/

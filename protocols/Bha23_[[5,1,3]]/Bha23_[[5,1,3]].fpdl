@@ -1,0 +1,198 @@
+
+protocol Bha23_[[5,1,3]]:
+
+    code:
+        [[5,1,3]]
+        
+        [[X,Z,Z,X,I],
+         [I,X,Z,Z,X],
+         [X,I,X,Z,Z],
+         [Z,X,I,X,Z]]
+
+    se:
+        XZZXI_f {
+            file: "./XZZXI_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X,Z,Z,X,I]]
+            #-flag: 1
+        }    
+
+        IXZZX_f {
+            file: "./IXZZX_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[I,X,Z,Z,X]]
+            #-flag: 1
+        }    
+
+        XIXZZ_f {
+            file: "./XIXZZ_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X,I,X,Z,Z]]
+            #-flag: 1
+        }    
+
+        ZXIXZ_f {
+            file: "./ZXIXZ_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[Z,X,I,X,Z]]
+            #-flag: 1
+        }        
+
+        FSE_b {
+            file: "./FSE_b.qasm"
+            qd: data
+            qm: syn
+            g: [[X,Z,Z,X,I],
+             [I,X,Z,Z,X],
+             [X,I,X,Z,Z],
+             [Z,X,I,X,Z]]
+        }
+
+        XZZXI_b {
+            file: "./XZZXI_b.qasm"
+            qd: data
+            qm: syn
+            g: [[X,Z,Z,X,I]]
+        }
+
+        IXZZX_b {
+            file: "./IXZZX_b.qasm"
+            qd: data
+            qm: syn
+            g: [[I,X,Z,Z,X]]
+        }
+
+        XIXZZ_b {
+            file: "./XIXZZ_b.qasm"
+            qd: data
+            qm: syn
+            g: [[X,I,X,Z,Z]]
+        }
+
+        ZXIXZ_b {
+            file: "./ZXIXZ_b.qasm"
+            qd: data
+            qm: syn
+            g: [[Z,X,I,X,Z]]
+        }
+
+        IYXXY_b {
+            file: "./IYXXY_b.qasm"
+            qd: data
+            qm: syn
+            g: [[I,Y,X,X,Y]]
+        }
+
+        YIYXX_b {
+            file: "./YIYXX_b.qasm"
+            qd: data
+            qm: syn
+            g: [[Y,I,Y,X,X]]
+        }
+
+        YXXYI_b {
+            file: "./YXXYI_b.qasm"
+            qd: data
+            qm: syn
+            g: [[Y,X,X,Y,I]]
+        }
+
+        YZIZY_b {
+            file: "./YZIZY_b.qasm"
+            qd: data
+            qm: syn
+            g: [[Y,Z,I,Z,Y]]
+        }
+
+        ZIZYY_b {
+            file: "./ZIZYY_b.qasm"
+            qd: data
+            qm: syn
+            g: [[Z,I,Z,Y,Y]]
+        }
+
+    gvar:
+        cnt n  = 0;
+        bit s  = 0;
+        bit f  = 0;
+        bit sb = ⊥;
+        mr  m  = mr[];
+
+    tc:
+        1: (s == 1) and (f == 0)
+        2: (sb != ⊥)
+        3: (n == 4) and (s == 0) and (f == 0)
+    
+    af:
+        while(!tc) {
+            if ((s == 0) and (f == 0)) {
+                switch(n) {
+                    0: { (s,f) = XZZXI_f(); }
+                    1: { (s,f) = IXZZX_f(); }
+                    2: { (s,f) = XIXZZ_f(); }
+                    3: { (s,f) = ZXIXZ_f(); }
+                }
+                m.push({s,f});
+                n += 1;
+
+            } else { // (s,f) = (0,1) or (1,0)
+                switch(n) {
+                    1: { (s,) = XZZXI_b(); (sb,) = YXXYI_b(); }
+                    2: { (s,) = IXZZX_b(); (sb,) = IYXXY_b(); }
+                    3: { (s,) = XIXZZ_b(); (sb,) = YIYXX_b(); }
+                    4: { (s,) = ZXIXZ_b(); (sb,) = YZIZY_b(); }
+                }
+                m.push(s);
+                m.push(sb);
+            }
+        }
+
+    tp:
+        1: { 
+            bit[4] s_full = ⊥;
+            (s_full,) = FSE_b();
+            m.push(s_full);
+            decode(m);
+        }
+    
+        2: {
+            switch(n) {
+                1: { 
+                    bit s_next = ⊥;
+                    if (sb == 1) { (s_next,) = ZIZYY_b(); }
+                    else { (s_next,) = XIXZZ_b(); }
+                    m.push(s_next);
+                }
+                2: { 
+                    bit s_next = ⊥;
+                    if (sb == 1) { (s_next,) = YZIZY_b(); }
+                    else { (s_next,) = ZXIXZ_b(); }
+                    m.push(s_next);
+                }
+                3: { 
+                    bit s_next = ⊥;
+                    if (sb == 1) { (s_next,) = YZIZY_b(); }
+                    else { (s_next,) = ZXIXZ_b(); }
+                    m.push(s_next);
+                }
+                4: { 
+                    bit s_next = ⊥;
+                    if (sb == 1) { (s_next,) = YIYXX_b(); }
+                    else { (s_next,) = XIXZZ_b(); }
+                    m.push(s_next);
+                }
+            }
+            decode(m);
+        }
+
+        3: {
+            end();
+        }

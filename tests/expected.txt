@@ -1,0 +1,10 @@
+# Expected verdict of every distance-3 protocol, one line each, as fqcv_tests prints it.
+# Cross-checked against an independent hand-written BuDDy backend when this file was made.
+# Regenerate with: build/fqcv_tests --print <protocol.fpdl>...
+Bha23_[[5,1,3]]	paths=13 records=97 circuits=64 min_t=-1 failures=0
+Bha23_[[7,1,3]]_fig5	paths=19 records=142 circuits=111 min_t=-1 failures=0
+Bha23_[[7,1,3]]_fig6	paths=4 records=85 circuits=8 min_t=1 failures=5 [path 0 t=1 record=0,0|000000] [path 0 t=1 record=0,0|000001] [path 0 t=1 record=0,0|000010] [path 0 t=1 record=0,0|001001] [path 0 t=1 record=0,0|001010]
+CR17_[[5,1,3]]	paths=5 records=117 circuits=16 min_t=-1 failures=0
+LL25_[[5,1,3]]_[1,1,1,1]^T	paths=2 records=117 circuits=40 min_t=-1 failures=0
+LL25_[[5,1,3]]_[2,2]	paths=2 records=134 circuits=36 min_t=1 failures=4 [path 1 t=1 record=0001,01|0011] [path 1 t=1 record=0001,01|0111] [path 1 t=1 record=0011,10|1001] [path 1 t=1 record=0111,10|1111]
+LL25_[[5,1,3]]_[2,2]^T	paths=2 records=153 circuits=36 min_t=1 failures=1 [path 1 t=1 record=0001,01|0011]

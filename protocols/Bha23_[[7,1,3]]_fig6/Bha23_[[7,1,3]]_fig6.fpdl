@@ -1,0 +1,85 @@
+
+protocol Bha23_[[7,1,3]]_fig6:
+
+    code:
+        [[7,1,3]]
+        
+        [[I,I,I,X,X,X,X],
+        [I,X,X,I,I,X,X],
+        [X,I,X,I,X,I,X],
+        [I,I,I,Z,Z,Z,Z],
+        [I,Z,Z,I,I,Z,Z],
+        [Z,I,Z,I,Z,I,Z]]
+
+    se:
+        FSE_b {
+            file: "./FSE_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,I,I,X,X,X,X],
+                [I,X,X,I,I,X,X],
+                [X,I,X,I,X,I,X],
+                [I,I,I,Z,Z,Z,Z],
+                [I,Z,Z,I,I,Z,Z],
+                [Z,I,Z,I,Z,I,Z]]
+        }
+
+        IZZXXYY_f {
+            file: "./IZZXXYY_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[I,Z,Z,X,X,Y,Y]]
+            #-flag: 1
+        }
+
+        XIXYZYZ_f {
+            file: "./XIXYZYZ_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[X,I,X,Y,Z,Y,Z]]
+            #-flag: 1
+        }
+
+        ZXYYXZI_f {
+            file: "./ZXYYXZI_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[Z,X,Y,Y,X,Z,I]]
+            #-flag: 1
+        }
+
+    gvar:
+        cnt n = 0;
+        bit s = 1;
+        bit f = 0;
+        mr m = mr[];
+
+    tc:
+       1: (s != 1) or (f != 0)
+       2: (n == 3) and (s == 1) and (f == 0)
+    
+    af:
+        while(!tc) {
+            switch(n) {
+                0: { (s,f) = IZZXXYY_f(); }
+                1: { (s,f) = XIXYZYZ_f(); }
+                2: { (s,f) = ZXYYXZI_f(); }
+            }
+            m.push({s,f});
+            n += 1;
+        }
+
+    tp:
+        1: {
+            bit[6] sb;
+            (sb,) = FSE_b();
+            m.push(sb);
+            decode(m);
+        }
+
+        2: {
+            end();
+        }

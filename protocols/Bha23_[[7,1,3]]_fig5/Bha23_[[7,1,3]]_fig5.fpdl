@@ -1,0 +1,242 @@
+
+protocol Bha23_[[7,1,3]]_fig5:
+
+    code:
+        [[7,1,3]]
+        
+        [[I,I,I,X,X,X,X],
+        [I,X,X,I,I,X,X],
+        [X,I,X,I,X,I,X],
+        [I,I,I,Z,Z,Z,Z],
+        [I,Z,Z,I,I,Z,Z],
+        [Z,I,Z,I,Z,I,Z]]
+
+    se:
+        IIIXXXX_f {
+            file: "./IIIXXXX_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[I,I,I,X,X,X,X]]
+            #-flag: 1
+        }
+
+        IXXIIXX_f {
+            file: "./IXXIIXX_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[I,X,X,I,I,X,X]]
+            #-flag: 1
+        }
+
+        XIXIXIX_f {
+            file: "./XIXIXIX_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[X,I,X,I,X,I,X]]
+            #-flag: 1
+        }
+
+        IIIZZZZ_f {
+            file: "./IIIZZZZ_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[I,I,I,Z,Z,Z,Z]]
+            #-flag: 1
+        }
+
+        IZZIIZZ_f {
+            file: "./IZZIIZZ_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[I,Z,Z,I,I,Z,Z]]
+            #-flag: 1
+        }
+
+        ZIZIZIZ_f {
+            file: "./ZIZIZIZ_f.qasm"
+            qd: qd
+            qm: qm
+            qf: qf
+            g: [[Z,I,Z,I,Z,I,Z]]
+            #-flag: 1
+        }
+
+        IIIXXXX_b {
+            file: "./IIIXXXX_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,I,I,X,X,X,X]]
+        }
+
+        IXXIIXX_b {
+            file: "./IXXIIXX_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,X,X,I,I,X,X]]
+        }
+
+        XIXIXIX_b {
+            file: "./XIXIXIX_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[X,I,X,I,X,I,X]]
+        }
+
+        IIIZZZZ_b {
+            file: "./IIIZZZZ_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,I,I,Z,Z,Z,Z]]
+        }
+
+        IZZIIZZ_b {
+            file: "./IZZIIZZ_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,Z,Z,I,I,Z,Z]]
+        }
+
+        ZIZIZIZ_b {
+            file: "./ZIZIZIZ_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[Z,I,Z,I,Z,I,Z]]
+        }
+
+        X_SE_b {
+            file: "./X_SE_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,I,I,X,X,X,X],
+                [I,X,X,I,I,X,X],
+                [X,I,X,I,X,I,X]]
+        }
+
+        Z_SE_b {
+            file: "./Z_SE_b.qasm"
+            qd: qd
+            qm: qm
+            g: [[I,I,I,Z,Z,Z,Z],
+                [I,Z,Z,I,I,Z,Z],
+                [Z,I,Z,I,Z,I,Z]]
+        }
+
+    gvar:
+        cnt n = 0;
+        bit s = 0;
+        bit f = 0;
+        bit s1 = ⊥;
+        bit s2 = ⊥;
+        mr  m  = mr[];
+
+    tc:
+        1: (s == 1) and (f == 0)
+        2: (s1 != ⊥) and (s2 != ⊥)
+        3: (n == 6) and (s == 0) and (f == 0)
+    
+    af:
+        while(!tc) {
+            if ((s == 0) and (f == 0)) {
+                switch(n) {
+                    0: { (s,f) = IIIXXXX_f(); }
+                    1: { (s,f) = IXXIIXX_f(); }
+                    2: { (s,f) = XIXIXIX_f(); }
+                    3: { (s,f) = IIIZZZZ_f(); }
+                    4: { (s,f) = IZZIIZZ_f(); }
+                    5: { (s,f) = ZIZIZIZ_f(); }
+                }
+                m.push({s,f});
+                n += 1;
+
+            } else { // (s,f) = (0,1) or (1,0)
+                switch(n) {
+                    1: { (s1,) = IIIXXXX_b(); (s2,) = IIIZZZZ_b(); }
+                    2: { (s1,) = IXXIIXX_b(); (s2,) = IZZIIZZ_b(); }
+                    3: { (s1,) = XIXIXIX_b(); (s2,) = ZIZIZIZ_b(); }
+                    4: { (s1,) = IIIZZZZ_b(); (s2,) = IIIXXXX_b(); }
+                    5: { (s1,) = IZZIIZZ_b(); (s2,) = IXXIIXX_b(); }
+                    6: { (s1,) = ZIZIZIZ_b(); (s2,) = XIXIXIX_b(); }
+                }
+                m.push(s1);
+                m.push(s2);
+            }
+        }
+
+    tp:
+        1: {
+            if (n <= 3) {
+                bit[3] sb = ⊥;
+                (sb,) = X_SE_b();
+                m.push(sb);
+                switch(n) {
+                    1: { (s,) = IIIZZZZ_b(); }
+                    2: { (s,) = IZZIIZZ_b(); }
+                    3: { (s,) = ZIZIZIZ_b(); }
+                }
+                m.push(s);
+                decode(m);
+            } else {
+                bit[3] sb = ⊥;
+                (sb,) = Z_SE_b();
+                m.push(sb);
+                switch(n) {
+                    1: { (s,) = IIIXXXX_b(); }
+                    2: { (s,) = IXXIIXX_b(); }
+                    3: { (s,) = XIXIXIX_b(); }
+                }
+                m.push(s);
+                decode(m);
+            }
+        }
+
+        2: {
+            switch(n) {
+                1: { 
+                    bit s_next = ⊥;
+                    if (s1 == 0) { (s_next,) = ZIZIZIZ_b(); }
+                    else { (s_next,) = XIXIXIX_b(); }
+                    m.push(s_next);
+                }
+                2: { 
+                    bit s_next = ⊥;
+                    if (s1 == 0) { (s_next,) = ZIZIZIZ_b(); }
+                    else { (s_next,) = XIXIXIX_b(); }
+                    m.push(s_next);
+                }
+                3: { 
+                    bit s_next = ⊥;
+                    if (s1 == 0) { (s_next,) = IZZIIZZ_b(); }
+                    else { (s_next,) = IXXIIXX_b(); }
+                    m.push(s_next);
+                }
+                4: { 
+                    bit s_next = ⊥;
+                    if (s1 == 0) { (s_next,) = XIXIXIX_b(); }
+                    else { (s_next,) = ZIZIZIZ_b(); }
+                    m.push(s_next);
+                }
+                5: { 
+                    bit s_next = ⊥;
+                    if (s1 == 0) { (s_next,) = XIXIXIX_b(); }
+                    else { (s_next,) = ZIZIZIZ_b(); }
+                    m.push(s_next);
+                }
+                6: { 
+                    bit s_next = ⊥;
+                    if (s1 == 0) { (s_next,) = IXXIIXX_b(); }
+                    else { (s_next,) = IZZIIZZ_b(); }
+                    m.push(s_next);
+                }
+            }
+            decode(m);
+        }
+
+        3: {
+            end();
+        }
+        

@@ -1,0 +1,183 @@
+protocol Du24_[[17,1,5]]_parallel:
+
+    code:
+        [[17,1,5]]
+
+        [[Z1, Z2, Z3, Z4],
+         [Z1, Z3, Z5, Z6],
+         [Z5, Z6, Z9, Z10],
+         [Z7, Z8, Z11, Z12],
+         [Z9, Z10, Z13, Z14],
+         [Z11, Z12, Z15, Z16],
+         [Z8, Z12, Z16, Z17],
+         [Z3, Z4, Z6, Z7, Z10, Z11, Z14, Z15],
+         [X1, X2, X3, X4],
+         [X1, X3, X5, X6],
+         [X5, X6, X9, X10],
+         [X7, X8, X11, X12],
+         [X9, X10, X13, X14],
+         [X11, X12, X15, X16],
+         [X8, X12, X16, X17],
+         [X3, X4, X6, X7, X10, X11, X14, X15]]
+
+    se:
+        FSE_b {
+            file: "./FSE_b.qasm"
+            qd: data
+            qm: syn
+            g: [[Z1, Z2, Z3, Z4], [Z1, Z3, Z5, Z6],
+                [Z5, Z6, Z9, Z10], [Z7, Z8, Z11, Z12],
+                [Z9, Z10, Z13, Z14], [Z11, Z12, Z15, Z16],
+                [Z8, Z12, Z16, Z17],
+                [Z3, Z4, Z6, Z7, Z10, Z11, Z14, Z15],
+                [X1, X2, X3, X4], [X1, X3, X5, X6],
+                [X5, X6, X9, X10], [X7, X8, X11, X12],
+                [X9, X10, X13, X14], [X11, X12, X15, X16],
+                [X8, X12, X16, X17],
+                [X3, X4, X6, X7, X10, X11, X14, X15]]
+        }
+
+        F5Z_f {
+            file: "./FSE_f_fig5_Z.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[Z3, Z4, Z6, Z7, Z10, Z11, Z14, Z15],
+                [Z1, Z2, Z3, Z4], [Z5, Z6, Z9, Z10],
+                [Z1, Z3, Z5, Z6]]
+            #-flag: 2
+        }
+
+        F6Z_f {
+            file: "./FSE_f_fig6_Z.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[Z7, Z8, Z11, Z12], [Z11, Z12, Z15, Z16],
+                [Z8, Z12, Z16, Z17], [Z9, Z10, Z13, Z14]]
+            #-flag: 2
+        }
+
+        F5X_f {
+            file: "./FSE_f_fig5_X.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X3, X4, X6, X7, X10, X11, X14, X15],
+                [X1, X2, X3, X4], [X5, X6, X9, X10],
+                [X1, X3, X5, X6]]
+            #-flag: 2
+        }
+
+        F6X_f {
+            file: "./FSE_f_fig6_X.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X7, X8, X11, X12], [X11, X12, X15, X16],
+                [X8, X12, X16, X17], [X9, X10, X13, X14]]
+            #-flag: 2
+        }
+
+    gvar:
+        cnt n_c_same = 0;
+        cnt n_same = 0;
+        cnt n_diff = 0;
+        cnt n_flag = 0;
+        
+        mr s_prev = ⊥;
+        bit diff_prev = 0;
+        mr m = mr[];
+
+    tc:
+        1: ((n_c_same == 3 - n_diff - 1 and n_c_same != 0) and n_flag == 0)
+        2: (n_diff == 2 and n_flag == 0)
+        3: (n_flag == 2)
+        4: (n_diff == 1 and n_flag == 1)
+        5: (n_same == 1 and n_diff == 0 and n_flag == 1)
+
+    af:
+        while(!tc) {
+            bit[4] s5z = ⊥;
+            bit[4] s6z = ⊥;
+            bit[4] s5x = ⊥;
+            bit[4] s6x = ⊥;
+            bit[3] f5z = ⊥;
+            bit[2] f6z = ⊥;
+            bit[3] f5x = ⊥;
+            bit[2] f6x = ⊥;
+            cnt flagged_blocks = 0;
+            (s5z, f5z) = F5Z_f();
+            (s6z, f6z) = F6Z_f();
+            (s5x, f5x) = F5X_f();
+            (s6x, f6x) = F6X_f();
+
+            // A full round is the ordered record of the four parallel
+            // circuits. Each circuit's g: declaration supplies its exact
+            // Equation (3) generator mapping to the verifier/decoder.
+            mr s = mr[];
+            s.push(s5z);
+            s.push(s6z);
+            s.push(s5x);
+            s.push(s6x);
+
+            if (f5z != 0) { flagged_blocks += 1; }
+            if (f6z != 0) { flagged_blocks += 1; }
+            if (f5x != 0) { flagged_blocks += 1; }
+            if (f6x != 0) { flagged_blocks += 1; }
+
+            if (flagged_blocks != 0) {
+                n_c_same = 0;
+                n_same = 0;
+                if (n_flag == 0 and flagged_blocks == 1) {
+                    n_flag += 1;
+                }
+                else {
+                    // Algorithm 1 only distinguishes one flagged circuit
+                    // from a set of two; cap the two-fault state at two.
+                    n_flag = 2;
+                }
+                s_prev = ⊥;
+                diff_prev = 0;
+                m.push({f5z, f6z, f5x, f6x});
+                continue;
+            }
+
+            if (s_prev != ⊥) {
+                if (diff_prev == 1) { diff_prev = 0; }
+                else if (s == s_prev) {
+                    n_c_same += 1;
+                    n_same += 1;
+                }
+                else {
+                    n_c_same = 0;
+                    n_diff += 1;
+                    diff_prev = 1;
+                }
+            }
+            s_prev = s;
+        }
+
+    tp:
+        1: { decode(s_prev); }
+        2: {
+            bit[16] s = ⊥;
+            (s,) = FSE_b();
+            decode(mr[s]);
+        }
+        3: {
+            bit[16] s = ⊥;
+            (s,) = FSE_b();
+            m.push(s);
+            decode(m);
+        }
+        4: {
+            bit[16] s = ⊥;
+            (s,) = FSE_b();
+            m.push(s);
+            decode(m);
+        }
+        5: {
+            m.push(s_prev);
+            decode(m);
+        }

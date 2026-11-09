@@ -1,0 +1,92 @@
+
+protocol CR17_[[5,1,3]]:
+
+    code:
+        [[5,1,3]]
+        
+        [[X,Z,Z,X,I],
+         [I,X,Z,Z,X],
+         [X,I,X,Z,Z],
+         [Z,X,I,X,Z]]
+
+    se:
+        XZZXI_f {
+            file: "./XZZXI_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X,Z,Z,X,I]]
+            #-flag: 1
+        }    
+
+        IXZZX_f {
+            file: "./IXZZX_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[I,X,Z,Z,X]]
+            #-flag: 1
+        }    
+
+        XIXZZ_f {
+            file: "./XIXZZ_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X,I,X,Z,Z]]
+            #-flag: 1
+        }    
+
+        ZXIXZ_f {
+            file: "./ZXIXZ_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[Z,X,I,X,Z]]
+            #-flag: 1
+        }        
+
+        FSE_b {
+            file: "./FSE_b.qasm"
+            qd: data
+            qm: syn
+            g: [[X,Z,Z,X,I],
+             [I,X,Z,Z,X],
+             [X,I,X,Z,Z],
+             [Z,X,I,X,Z]]
+        }    
+
+    gvar:
+        cnt n = 0;
+        bit s = 0;
+        bit f = 0;
+        mr  m = mr[];
+
+    tc:
+        1: (s != 0) or (f != 0)
+        2: (n == 4) and (s == 0) and (f == 0)
+    
+    af:
+        while(!tc) {
+            switch(n) {
+                0: { (s,f) = XZZXI_f(); }
+                1: { (s,f) = IXZZX_f(); }
+                2: { (s,f) = XIXZZ_f(); }
+                3: { (s,f) = ZXIXZ_f(); }
+            }
+            m.push({s,f});
+            n += 1;
+        }
+
+    tp:
+        1: { 
+            bit[4] s_full = ⊥;
+            (s_full,) = FSE_b();
+            m.push(s_full);
+            decode(m);
+        }
+    
+        2: {
+            end();
+        }
+

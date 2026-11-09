@@ -1,0 +1,58 @@
+
+protocol LL25_[[5,1,3]]_[1,1,1,1]^T:
+
+    code:
+        [[5,1,3]]
+        
+        [[X,Z,Z,X,I],
+         [I,X,Z,Z,X],
+         [X,I,X,Z,Z],
+         [Z,X,I,X,Z]]
+
+    se:
+        FSE_b {
+            file: "./FSE_b.qasm"
+            qd: data
+            qm: syn
+            g: [[X,Z,Z,X,I],
+                [I,X,Z,Z,X],
+                [X,I,X,Z,Z],
+                [Z,X,I,X,Z]]
+        }
+
+        FSE_f {
+            file: "./FSE_f.qasm"
+            qd: data
+            qm: syn
+            qf: flag
+            g: [[X,Z,Z,X,I],
+                [I,X,Z,Z,X],
+                [X,I,X,Z,Z],
+                [Z,X,I,X,Z]]
+            #-flag: 1
+        }
+
+    gvar:
+        bit[4] m = ⊥;
+        bit[]  f = ⊥;
+
+    tc:
+        1: (m == 0) and (f == 0)
+        2: ((m != 0) or (f != 0)) and (m != ⊥)
+    
+    af:
+        while(!tc) {
+            (m,f) = FSE_f();
+        }
+
+    tp:
+        1: { 
+            end();
+        }
+    
+        2: {
+            bit[4] mp = ⊥;
+            (mp,) = FSE_b();
+            decode(mr[m, f, mp]);
+        }
+
