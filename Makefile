@@ -2,6 +2,7 @@
 #
 #   make            fetch and build SPBDD, then build ftec-verify
 #   make check      also build and run the tests
+#   make site       build the website's WebAssembly playgrounds (needs Emscripten)
 #   make clean      remove build/ (keeps the fetched SPBDD)
 #   make distclean  also remove third_party/
 #
@@ -42,7 +43,7 @@ TESTS    := $(BUILD)/parser_tests $(BUILD)/qasm_tests $(BUILD)/fqcv_tests
 CPPFLAGS := -Iinclude -I$(SPBDD_DIR)/include -MMD -MP
 LDLIBS   := $(SPBDD_LIB) -lm
 
-.PHONY: all spbdd check clean distclean
+.PHONY: all spbdd check site clean distclean
 .DELETE_ON_ERROR:
 .SECONDARY:
 
@@ -101,6 +102,10 @@ check: $(BIN) $(TESTS)
 	$(BUILD)/parser_tests $(FPDL_ALL)
 	$(BUILD)/qasm_tests $(QASM_ALL)
 	$(BUILD)/fqcv_tests tests/expected.txt $(FPDL_D3)
+
+# The website's WebAssembly builds (needs Emscripten); see web/Makefile.
+site: $(SPBDD_STAMP)
+	$(MAKE) -f web/Makefile SPBDD_SRC=$(SPBDD_SRC)
 
 clean:
 	rm -rf $(BUILD)

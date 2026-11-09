@@ -4,6 +4,10 @@
 
 #include <sys/resource.h>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten/heap.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -22,12 +26,18 @@ namespace {
 // macOS and in kilobytes everywhere else, which is a difference that silently
 // makes the number wrong by 1024 if it is not handled.
 std::size_t peak_memory_bytes() {
+#if defined(__EMSCRIPTEN__)
+    // In the browser: the WebAssembly heap only ever grows, so its size is
+    // the peak.
+    return emscripten_get_heap_size();
+#else
     rusage usage{};
     if (getrusage(RUSAGE_SELF, &usage) != 0) return 0;
 #if defined(__APPLE__)
     return static_cast<std::size_t>(usage.ru_maxrss);
 #else
     return static_cast<std::size_t>(usage.ru_maxrss) * 1024;
+#endif
 #endif
 }
 

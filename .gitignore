@@ -5,3 +5,10 @@
 ._*
 .DS_Store
 __pycache__/
+
+# Built by `make site`; published on the gh-pages branch.
+/site/playground/ftec.js
+/site/playground/ftec.wasm
+/site/playground/protocols.json
+/site/spbdd/spbdd.js
+/site/spbdd/spbdd.wasm

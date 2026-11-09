@@ -1,149 +1,193 @@
 # Flag protocol verifier
 
-這個工具判斷一個 flag fault-tolerant 協定是否真的容錯。
+Checks whether a flag fault-tolerant error-correction protocol is actually
+fault tolerant.
 
-輸入是用 FPDL 寫的協定描述，以及它引用的 QASM 電路。驗證時會：
+Given a protocol written in FPDL and the OpenQASM circuits it uses, the
+verifier enumerates every execution path, injects every fault at every fault
+location, and asks whether some path leaves two errors that the measurement
+record cannot tell apart but whose product lies in `N(S)\S`. If such a pair
+exists, correcting one of the errors damages the encoded state under the other,
+and the protocol is not fault tolerant.
 
-- 枚舉所有可能的執行路徑；
-- 在每個 fault location 注入所有可能的 fault；
-- 檢查是否存在一條路徑，使得兩個無法區分的 error 相乘之後落在 `N(S)\S`。若存在，decoder 修正其中一個時就會傷到另一個，協定不容錯。
+All Pauli-set representation and arithmetic is done by
+[SPBDD](https://github.com/fmlab-iis/spbdd), a library that represents sets of
+multi-qubit Pauli operators as BuDDy BDDs.
 
-Pauli 集合的表示與運算全部交給 [SPBDD](https://github.com/fmlab-iis/spbdd)。SPBDD 以 BuDDy 的 BDD 表示多量子位元 Pauli 集合。
+**Website and browser playgrounds:** <https://jtsai1120.github.io/flag-protocol-verifier/>
 
 ```
 .fpdl ──► fpdl::Parser ──┬─► code: [[n,k,d]] + generators ──► tau = ⌊(d−1)/2⌋
-                          ├─► SE 宣告（qd/qm/qf, file）
+                          ├─► SE declarations (qd/qm/qf, file)
                           └─► SymbolicPaths ──► ftec::build_dag ──► trie
                                                                      │
-                                                          DFS + 條件路由
+                                                       DFS + guard routing
                                                                      ▼
                                                            spbdd backend
-                                              （狀態傳遞、fault 注入、測量分裂、
-                                                最終 E1E2 查詢）
+                                              (state propagation, fault injection,
+                                               measurement splitting, final E1E2 query)
 ```
 
-## 建置
+## Building
 
-需要 `g++`（C++20）、`make` 與 `git`。
+You need `g++` (C++20), `make` and `git`.
 
 ```bash
-make          # 抓 SPBDD → 建出 libspbdd.a → 建 build/ftec-verify
-make check    # 另外建並跑測試
+make          # fetch SPBDD → build libspbdd.a → build build/ftec-verify
+make check    # also build and run the tests
 ```
 
-`make` 的流程如下：
+What `make` does:
 
-1. 把 `fmlab-iis/spbdd` 抓到 `third_party/spbdd-src`，版本釘在 `Makefile` 裡的 `SPBDD_REF`。
-2. 用 SPBDD 自己的 Makefile 建出 `libspbdd.a`。這一步會抓 BuDDy，並把 BuDDy 一起包進同一個 archive。
-3. 只保留 archive 與公開標頭：
+1. Fetches `fmlab-iis/spbdd` into `third_party/spbdd-src`, pinned to
+   `SPBDD_REF` in the `Makefile`.
+2. Builds `libspbdd.a` with SPBDD's own Makefile. That fetches BuDDy and bundles
+   it into the same archive.
+3. Keeps only the archive and the public headers:
    ```
    third_party/spbdd/lib/libspbdd.a
    third_party/spbdd/include/spbdd/{spbdd,code,context,pset}.hpp, bdd.h
    ```
-4. 驗證器本身只連結這個 archive。
+4. Links the verifier against that archive alone.
 
-| 指令 | 用途 |
+| Command | Purpose |
 |---|---|
-| `make SPBDD_REF=<branch/tag/commit>` | 換一個 SPBDD 版本（先 `make distclean`） |
-| `make SPBDD_SRC=/path/to/spbdd` | 直接用手邊的 SPBDD checkout，不抓 |
-| `make clean` | 刪 `build/` |
-| `make distclean` | 連 `third_party/` 一起刪 |
+| `make SPBDD_REF=<branch/tag/commit>` | Use another SPBDD version (run `make distclean` first) |
+| `make SPBDD_SRC=/path/to/spbdd` | Use an SPBDD checkout you already have, without fetching |
+| `make site` | Build the website's WebAssembly playgrounds (needs Emscripten) |
+| `make clean` | Remove `build/` |
+| `make distclean` | Also remove `third_party/` |
 
-## 使用
+## Usage
 
 ```bash
-./build/ftec-verify <protocol.fpdl> [選項]
+./build/ftec-verify <protocol.fpdl> [options]
 
 ./build/ftec-verify "protocols/CR17_[[5,1,3]]/CR17_[[5,1,3]].fpdl"
 ./build/ftec-verify "protocols/CB18_[[17,1,5]]_plain/CB18_[[17,1,5]]_plain.fpdl" --fqcv=table
 ```
 
-| 選項 | 預設值 | 說明 |
+| Option | Default | Description |
 |---|---|---|
-| `--fqcv=METHOD` | `image` | 最終 E1E2 查詢的方法，可選 `bruteforce`、`table`、`image`、`square`（見下） |
-| `--bound=N` | 倍增搜尋 | 固定 BMC bound；不給時從 16 倍增，直到展開完整（上限 65536） |
-| `--max-paths=N` | `5000` | 符號路徑數超過就放棄 |
-| `--first` | 關閉 | 遇到第一條不受保護的路徑就停 |
-| `--dag` | 關閉 | 只印合併後的路徑結構，不做驗證 |
+| `--fqcv=METHOD` | `image` | How the final E1E2 query is answered: `bruteforce`, `table`, `image` or `square` (see below) |
+| `--bound=N` | searched | Fix the BMC bound; without it the bound doubles from 16 until the expansion is complete (up to 65536) |
+| `--max-paths=N` | `5000` | Give up past this many symbolic paths |
+| `--first` | off | Stop at the first unprotected path |
+| `--dag` | off | Print the merged path structure and exit without verifying |
 
-輸出包含：
+The output lists:
 
-- 到達的 paths、records、circuits 數量；
-- 判決：`no unprotected path found`，或列出每條失效路徑、它的 fault 數與量測紀錄；
-- backend 統計：cache 命中率、fqcv 時間與 BDD 大小；
-- 展開時間、走訪時間與峰值記憶體。
+- the number of paths, records and circuits reached;
+- the verdict: `no unprotected path found`, or each unprotected path with its
+  fault count and measurement record;
+- backend statistics: cache hit rates, and the time and BDD sizes of the final
+  query;
+- expansion time, traversal time and peak memory.
 
-BDD 動態變數重排固定關閉，因為在任何夠大、值得計時的協定上，重排都沒有帶來好處。
+Dynamic BDD variable reordering is always off. It never paid off on any
+protocol large enough to time.
 
-### 最終 E1E2 的四種方法
+### The four methods of the final E1E2 query
 
-四種方法都是 SPBDD 的 `code::find_qec_cond_violation`，回答同一個問題，判決必定相同，差別只在成本：
+All four are SPBDD's `code::find_qec_cond_violation`. They answer the same
+question and always give the same verdict; only the cost differs.
 
-| 方法 | 做法 |
+| Method | How |
 |---|---|
-| `bruteforce` | 列舉 E 的元素，兩兩相乘檢查 |
-| `table` | 列舉 E 一次，以 syndrome 為鍵建表 |
-| `image` | 沿 E 的 BDD 層做動態規劃，計算 label 集合的像 |
-| `square` | 算 E·E，問它與 N(S)−S 是否相交（N(S)−S 每個 code 只建一次） |
+| `bruteforce` | Enumerate the error set and multiply every pair |
+| `table` | Enumerate the error set once, keyed by syndrome |
+| `image` | Dynamic programming over the layers of the set's BDD, computing the image of the label set |
+| `square` | Build E·E and ask whether it meets N(S)−S (built once per code) |
 
-### 批次量測
+### Benchmarking
 
-`tools/bench_fqcv.py` 對每個協定、每種方法各跑一個獨立行程，所以峰值記憶體是該方法自己的。結果可輸出 JSON、CSV 或 Excel。統計把「最終 E1E2」和「之前的所有過程」分開，計算方式為 `E1E2 前 = traversal − fqcv − diagnostics`。
+`tools/bench_fqcv.py` runs every protocol once per method, each in its own
+process, so each method's peak memory is its own. Results go to JSON, CSV or
+Excel. The statistics keep the final query apart from everything before it:
+`before E1E2 = traversal − fqcv − diagnostics`.
 
 ```bash
 tools/bench_fqcv.py --xlsx fqcv.xlsx
 tools/bench_fqcv.py --protocol 25,1,5 --methods table,image,square --timeout 2000 --json out.json
 ```
 
-### 產生更高 qubit 的 CB18 協定
+### Generating larger CB18 protocols
 
-`tools/gen_cb18_surface.py` 依 Chamberland & Beverland, *Flag fault-tolerant error correction with arbitrary distance codes*（Quantum 2, 53, 2018）第 3 節的通用 t-FTEC 演算法，為 rotated surface code 產生 FPDL 與 `FSE_f` / `FSE_b` 電路。
+`tools/gen_cb18_surface.py` implements the general t-FTEC algorithm of
+Chamberland & Beverland, *Flag fault-tolerant error correction with arbitrary
+distance codes* (Quantum 2, 53, 2018), Section 3. It writes the FPDL file and
+the `FSE_f` / `FSE_b` circuits for a rotated surface code.
 
-- weight-4 的 check 使用 Fig. 2(b) 的單 flag 電路；weight-2 的 check 不加 flag。
-- 可以產生 d×d 的方形 lattice，也可以產生 d×C 的長方形 lattice（距離 d，qubit 數為 d·C）。
-- 產生的 d=5 協定與手寫的 `CB_18[[25,1,5]]_plain` 逐字相同。
+- Weight-4 checks use the single-flag circuit of Fig. 2(b). Weight-2 checks
+  are unflagged.
+- The lattice can be square (d×d) or rectangular (d×C: distance d, d·C qubits).
+- The generated d=5 protocol is identical to the hand-written
+  `CB_18[[25,1,5]]_plain`.
 
 ```bash
 tools/gen_cb18_surface.py 5 --out protocols            # [[25,1,5]]
-tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]]，5×9
+tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]], 5×9
 tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]
 ```
 
-參考量測：2 vCPU、7.8 GiB，兩個行程並行。
+Reference measurements (2 vCPU, 7.8 GiB, two runs in parallel):
 
-| protocol | E1E2 前 (s) | table fqcv | image fqcv | square fqcv | 峰值記憶體 |
+| Protocol | Before E1E2 (s) | table fqcv | image fqcv | square fqcv | Peak memory |
 |---|---|---|---|---|---|
 | CB18 [[25,1,5]] | 201–210 | 0.96 s | 1.85 s | 1.65 s | 157 MiB |
 | CB18 [[35,1,5]] 5×7 | 741–762 | 3.22 s | 4.45 s | 4.90 s | 331 MiB |
 | CB18 [[45,1,5]] 5×9 | 2215–2238 | 7.81 s | 10.47 s | 12.91 s | 601 MiB |
-| CB18 [[49,1,7]] | 超過 2000 s 未完成 | | | | |
+| CB18 [[49,1,7]] | did not finish in 2000 s | | | | |
 
-瓶頸在 E1E2 前的狀態傳遞與 fault 注入；最終 E1E2 只占總時間約 0.5%。
+The bottleneck is state propagation and fault injection before the final
+query. The query itself is about 0.5% of the total.
 
-## 測試
+## Tests
 
-`make check` 會跑三組測試：
+`make check` runs three test programs:
 
-- `parser_tests`：解析 `protocols/` 下所有 FPDL。
-- `qasm_tests`：解析所有 QASM 電路。
-- `fqcv_tests`：對所有 distance-3 協定，用四種方法各驗證一次。四種方法必須彼此一致，也必須等於 `tests/expected.txt` 記錄的判決。`expected.txt` 建立時，已和另一個獨立手寫的 BuDDy backend 交叉比對過。
+- `parser_tests` parses every FPDL file under `protocols/`.
+- `qasm_tests` parses every QASM circuit.
+- `fqcv_tests` verifies every distance-3 protocol once with each of the four
+  methods. The four results must agree with each other and with the verdicts
+  recorded in `tests/expected.txt`. Those verdicts were cross-checked against
+  an independent, hand-written BuDDy backend when the file was made.
 
-## 檔案結構
+## Website
+
+`site/` is the static website: a landing page and two playgrounds that run
+in the browser as WebAssembly.
+
+- The verifier playground runs the bundled protocols or your own `.fpdl` and
+  `.qasm` files.
+- The SPBDD playground runs JavaScript programs against SPBDD.
+
+`make site` compiles both with Emscripten and bundles the protocols into
+`site/playground/protocols.json`. The build outputs are not committed to
+`main`; the published copy lives on the `gh-pages` branch. To preview locally,
+serve the directory: `python3 -m http.server -d site`.
+
+## Layout
 
 ```
 Makefile
-include/fpdl/parser.hpp      FPDL 前端
-include/ftec/                驗證核心：qasm、dag（路徑 trie）、verify（走訪）、
-                             backend（介面）、spbdd_backend
-src/                         對應實作；ftec_verify_main.cpp 是 CLI
-tests/                       parser、qasm、fqcv 測試與 expected.txt
-tools/bench_fqcv.py          批次量測
-tools/gen_cb18_surface.py    CB18 協定產生器
-protocols/                   協定測資，一個目錄一個協定（.fpdl + 它引用的 .qasm）
-docs/FPDL.md                 FPDL 語言說明
+include/fpdl/parser.hpp      FPDL front end
+include/ftec/                verifier core: qasm, dag (path trie), verify (walk),
+                             backend (interface), spbdd_backend
+src/                         implementations; ftec_verify_main.cpp is the CLI
+tests/                       parser, qasm and fqcv tests, expected.txt
+tools/bench_fqcv.py          batch measurements
+tools/gen_cb18_surface.py    CB18 protocol generator
+protocols/                   test protocols, one directory each (.fpdl + the .qasm it uses)
+docs/FPDL.md                 the FPDL language
+web/                         WebAssembly builds for the website (Makefile, SPBDD bindings)
+site/                        the website
 ```
 
-## 已知限制
+## Known limitations
 
-- `Outcome` 把 syndrome 打包成 `uint64`，所以 syndrome 超過 64 bit 的 code（超過 65 qubit 的 rotated surface code）需要先修改這一點。
-- 預設 `--max-paths=5000`。
+- `Outcome` packs the syndrome into a `uint64`. Codes whose syndrome is longer
+  than 64 bits (rotated surface codes above 65 qubits) need this changed first.
+- `--max-paths` defaults to 5000.
+- The browser build runs about 2.6× slower than the native one, and its memory
+  is capped at 4 GiB.
