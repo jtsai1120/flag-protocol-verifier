@@ -22,7 +22,6 @@
     <a class="sec" href="#formats">Formats</a>
     <a class="sec" href="#protocols">Protocols</a>
     <a href="playground/">Playground</a>
-    <a href="spbdd/">SPBDD playground</a>
   </nav>
   <a class="gh" href="https://github.com/jtsai1120/flag-protocol-verifier">GitHub</a>
 </header>
@@ -206,7 +205,7 @@ cd flag-protocol-verifier</code></pre>
           <tr><td><code>tp</code></td><td>One terminating policy per terminal condition, ending in <code>decode(...)</code> or <code>end()</code>.</td></tr>
         </tbody>
       </table></div>
-<pre><code>protocol CB18_[[25,1,5]]_gen:
+<pre><code>protocol CB18_[[25,1,5]]_plain:
     code:
         [[25,1,5]]
         [[Z1, Z6], [Z2, Z3, Z7, Z8], ...]
@@ -274,13 +273,10 @@ tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]</code></pre>
 
 <section class="doc" id="play">
   <div class="doc-grid">
-    <h2>Playgrounds</h2>
+    <h2>Playground</h2>
     <div class="doc-body">
-      <p>Both tools run in your browser as WebAssembly, compiled from the same sources as the native build. Nothing is uploaded.</p>
-      <h3><a href="playground/">Verifier playground</a></h3>
+      <p>The <a href="playground/">playground</a> runs the verifier in your browser as WebAssembly, compiled from the same sources as the native build. Nothing is uploaded.</p>
       <p>Pick any bundled protocol or add your own <code>.fpdl</code> and <code>.qasm</code> files, edit them, and verify. Distance-3 protocols finish instantly. The distance-5 ones run for several minutes, about two and a half times their native time.</p>
-      <h3><a href="spbdd/">SPBDD playground</a></h3>
-      <p>Write C++ against SPBDD: build Pauli sets, push them through Clifford gates, inject faults, define a stabilizer code and ask for a QEC-condition violation. A small C++ interpreter runs your program on the WebAssembly build of the library. The examples are complete programs that also compile with <code>g++</code> and print the same.</p>
     </div>
   </div>
 </section>
