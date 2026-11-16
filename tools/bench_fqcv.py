@@ -6,10 +6,11 @@ each in its own process so that peak memory is that method's alone. For each
 run the verifier's own statistics are parsed, and the time is split the way the
 question is usually asked:
 
-    pre-fqcv time = traversal - fqcv time - diagnostics
+    pre-fqcv time = traversal - fqcv time - diagnostics - validity time
 
 i.e. everything before the final query: gate propagation, fault injection,
-measurement and splitting. "fqcv time" is only the call into the library
+measurement and splitting. "validity time" is the protocol validity check at
+the terminals (Cond 1/2/3 and the flag condition), reported on its own. "fqcv time" is only the call into the library
 (spbdd::code::find_qec_cond_violation); the extra numbers "square" reports
 (building N(S)-S, squaring the error set) are measured outside it, as
 "diagnostics", so asking for them does not inflate either figure.
@@ -78,6 +79,9 @@ field("sq_nodes_max", r"^sq nodes\s*:\s*max (\d+)", lambda m: int(m.group(1)))
 field("sq_nodes_sum", r"^sq nodes\s*:.*sum (\d+)", lambda m: int(m.group(1)))
 field("sq_build_total_s", rf"^sq build time\s*:\s*total {NUM} s", lambda m: float(m.group(1)))
 field("sq_build_max_s", rf"^sq build time\s*:.*max {NUM} s", lambda m: float(m.group(1)))
+field("validity_s", rf"^validity time\s*:\s*{NUM} s at the terminals", lambda m: float(m.group(1)))
+field("validity_rss_growth_bytes", rf"^validity rss\s*:\s*max growth in one call {SIZE}", to_bytes)
+field("invalid", r"^(\d+) invalid terminal record", lambda m: int(m.group(1)))
 field("diagnostics_s", rf"^diagnostics\s*:\s*{NUM} s", lambda m: float(m.group(1)))
 field("diagram_live", r"^diagram\s*:\s*(\d+) live", lambda m: int(m.group(1)))
 field("diagram_peak", r"^diagram\s*:.*peak (\d+)", lambda m: int(m.group(1)))
@@ -99,7 +103,10 @@ def parse(text: str) -> dict:
                       if "failures" in row else None)
     if "traversal_s" in row and "fqcv_s" in row:
         row["pre_fqcv_s"] = max(
-            0.0, row["traversal_s"] - row["fqcv_s"] - row.get("diagnostics_s", 0.0))
+            0.0, row["traversal_s"] - row["fqcv_s"] - row.get("diagnostics_s", 0.0)
+            - row.get("validity_s", 0.0))
+    if "invalid" not in row and "control flow is valid" in text:
+        row["invalid"] = 0
     return row
 
 
@@ -141,6 +148,8 @@ COLUMNS = [
     ("protocol", "protocol"), ("code", "code"), ("tau", "tau"), ("method", "fqcv method"),
     ("status", "status"), ("verdict", "verdict"),
     ("pre_fqcv_s", "pre-fqcv time (s)"), ("fqcv_s", "final E1E2 time (s)"),
+    ("validity_s", "validity time (s)"), ("validity_rss_growth_bytes", "validity RSS growth (bytes)"),
+    ("invalid", "invalid terminal records"),
     ("fqcv_max_call_s", "max single call (s)"), ("fqcv_calls", "fqcv calls"),
     ("expansion_s", "expansion (s)"), ("traversal_s", "traversal (s)"),
     ("total_s", "total (s)"), ("wall_s", "wall (s)"),
@@ -249,7 +258,7 @@ def write_xlsx(rows: list[dict], path: Path, notes: list[str]) -> None:
 
 
 NOTES = [
-    "pre-fqcv time = traversal - final E1E2 time - diagnostics: gate propagation, fault injection, "
+    "pre-fqcv time = traversal - final E1E2 time - diagnostics - validity time: gate propagation, fault injection, "
     "measurement and splitting, i.e. everything before the final fqcv.",
     "final E1E2 time = total time spent inside spbdd::code::find_qec_cond_violation over all checks "
     "(per distinct state; repeated states are served from the verifier's cache).",

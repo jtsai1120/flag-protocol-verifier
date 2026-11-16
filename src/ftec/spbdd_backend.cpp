@@ -227,7 +227,12 @@ public:
     }
 
     TerminalFacts terminal_facts(StateId id) override {
-        if (const auto found = facts_cache_.find(id); found != facts_cache_.end()) return found->second;
+        ++validity_.facts_calls;
+        if (const auto found = facts_cache_.find(id); found != facts_cache_.end()) {
+            ++validity_.facts_hits;
+            return found->second;
+        }
+        const Measured measured(*this, validity_.facts_seconds);
         const State& state = states_[id];
         TerminalFacts facts;
 
@@ -265,7 +270,12 @@ public:
 
     std::optional<std::string> flag_condition(const CircuitRef& circuit, int k) override {
         const auto key = std::make_pair(circuit.qasm.string(), k);
-        if (const auto found = flag_cache_.find(key); found != flag_cache_.end()) return found->second;
+        ++validity_.flag_calls;
+        if (const auto found = flag_cache_.find(key); found != flag_cache_.end()) {
+            ++validity_.flag_hits;
+            return found->second;
+        }
+        const Measured measured(*this, validity_.flag_seconds);
 
         const QasmProgram& program = program_for(circuit);
         const Layout       layout  = layout_for(program, circuit);
@@ -364,6 +374,18 @@ public:
             out << '\n';
         }
 
+        out << "validity facts  : " << validity_.facts_calls << " call(s), " << validity_.facts_hits
+            << " from cache, ";
+        seconds(validity_.facts_seconds);
+        out << "\nflag condition  : " << validity_.flag_calls << " call(s), " << validity_.flag_hits
+            << " from cache, ";
+        seconds(validity_.flag_seconds);
+        out << "\nvalidity backend: ";
+        seconds(validity_.facts_seconds + validity_.flag_seconds);
+        out << "\nvalidity rss    : max growth in one call ";
+        kib(validity_.max_rss_growth_kib * 1024);
+        out << '\n';
+
         out << "diagnostics     : ";
         seconds(fqcv_.diagnostics_seconds);
         out << '\n';
@@ -378,6 +400,45 @@ public:
 private:
     using State    = std::vector<pset>;
     using CacheKey = std::pair<StateId, std::string>;
+
+    // Protocol validity work in the backend (Cond 1 / Cond 3 and the flag
+    // condition), timed apart from correctability, with its memory growth
+    // measured the way run_fqcv measures the final query.
+    struct ValidityStats {
+        std::size_t facts_calls = 0, facts_hits = 0, flag_calls = 0, flag_hits = 0;
+        double      facts_seconds = 0, flag_seconds = 0;
+        std::size_t max_rss_growth_kib = 0;
+    };
+
+    class Measured {
+    public:
+        Measured(SpbddBackend& backend, double& seconds) : backend_(backend), seconds_(seconds) {
+            if (backend_.tracking_) {
+                backend_.peak_rss_bytes_ =
+                    std::max(backend_.peak_rss_bytes_, status_kib("VmHWM") * 1024);
+                reset_high_water_mark();
+            }
+            rss_before_ = status_kib("VmRSS");
+            start_      = Clock::now();
+        }
+        ~Measured() {
+            seconds_ += seconds_since(start_);
+            const std::size_t high = status_kib("VmHWM");
+            if (backend_.tracking_) {
+                backend_.peak_rss_bytes_ = std::max(backend_.peak_rss_bytes_, high * 1024);
+            }
+            auto& growth = backend_.validity_.max_rss_growth_kib;
+            growth = std::max(growth, high > rss_before_ ? high - rss_before_ : 0);
+        }
+        Measured(const Measured&)            = delete;
+        Measured& operator=(const Measured&) = delete;
+
+    private:
+        SpbddBackend&     backend_;
+        double&           seconds_;
+        std::size_t       rss_before_ = 0;
+        Clock::time_point start_;
+    };
 
     // One classical outcome so far, and the error sets that can accompany it.
     struct Branch {
@@ -856,7 +917,8 @@ private:
     std::map<StateId, std::optional<Failure>>                    check_cache_;
     std::size_t step_calls_ = 0, step_hits_ = 0, check_calls_ = 0, check_hits_ = 0;
 
-    FqcvStats   fqcv_;
+    FqcvStats     fqcv_;
+    ValidityStats validity_;
     bool        nms_measured_   = false;
     bool        tracking_       = false;
     std::size_t peak_rss_bytes_ = 0;

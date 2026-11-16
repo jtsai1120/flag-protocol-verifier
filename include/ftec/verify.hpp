@@ -73,6 +73,7 @@ struct VerifyResult {
     // condition settled (the first that holds, in the order 1, 3, 2), and the
     // records none did.
     bool                         validity_checked = false;
+    double                       validity_seconds = 0;   // all validity work at terminals
     std::size_t                  by_condition[3]  = {0, 0, 0};
     std::vector<ValidityFailure> validity_failures;
 

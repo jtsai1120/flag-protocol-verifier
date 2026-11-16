@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -302,7 +303,12 @@ public:
                 note_failure(current, record, *failure);
                 if (options_.stop_at_first_failure) return false;
             }
-            if (options_.check_validity) check_validity(current, state, record);
+            if (options_.check_validity) {
+                const auto started = std::chrono::steady_clock::now();
+                check_validity(current, state, record);
+                result_.validity_seconds += std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - started).count();
+            }
             return true;
         }
 

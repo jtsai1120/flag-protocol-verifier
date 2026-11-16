@@ -221,8 +221,11 @@ int main(int argc, char** argv) {
 
         // The traversal verifies the circuits as written; this makes sure
         // they are the circuits the protocol says they are.
+        std::chrono::steady_clock::duration circuit_check_time{};
         if (!skip_circuit_check) {
+            const auto check_started = std::chrono::steady_clock::now();
             const auto report = ftec::check_circuits(dag);
+            circuit_check_time = std::chrono::steady_clock::now() - check_started;
             for (const auto& warning : report.warnings) std::cerr << "warning: " << warning << "\n";
             const auto& issues = report.errors;
             if (!issues.empty()) {
@@ -287,6 +290,15 @@ int main(int argc, char** argv) {
                               << "\n";
                 }
             }
+            std::cout << "validity time   : " << std::fixed << std::setprecision(3)
+                      << result.validity_seconds << " s at the terminals";
+            if (!skip_circuit_check) {
+                std::cout << ", plus "
+                          << std::chrono::duration<double>(circuit_check_time).count()
+                          << " s for the circuit check";
+            }
+            std::cout.unsetf(std::ios::floatfield);
+            std::cout << "\n";
             std::cout << "\nFTEC            : "
                       << (result.clean() && result.valid() ? "accepted" : "rejected") << "\n";
         }
