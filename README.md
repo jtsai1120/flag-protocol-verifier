@@ -233,6 +233,22 @@ In Bha23 [[5,1,3]], after a flag the adaptive measurements cannot tell a false
 alarm (`IIIII`) from the hook error `IIZXI`: both read 0 on `XZZXI`, `YXXYI` and
 `XIXZZ`, but they differ on `IXZZX`.
 
+Distance 5, `--fqcv=table`, 2 vCPU, two runs in parallel. Validity cost is the
+difference to the same run with `--no-validity`:
+
+| Protocol | Correctable | Control flow | Validity time | Traversal (with / without validity) | Peak memory (with / without) |
+|---|---|---|---|---|---|
+| CB18 [[17,1,5]] | yes | valid (Cond 2 settles 711 records) | 8.4 s | 176 s / 168 s | 202 / 193 MiB |
+| Du24 [[17,1,5]] plain | no, 36 records at t = 2 | 52 invalid records, 1 path | 11.4 s | 307 s / 293 s | 250 / 236 MiB |
+| LL25 [[17,1,5]] [1,1,1,1,1,...]^T | yes | 4016 invalid records, 2 paths | 17.8 s | 267 s / 242 s | 178 / 158 MiB |
+
+- Du24: after three trivial rounds the flag circuit `FSE_f` is not 2-flag: two
+  faults that raise no flag can leave `IIIIIIIXIIIIIIZXZ`, of weight 3.
+- LL25: the final rounds use the unflagged `FSE_b`, which is not 1-flag, so
+  Condition 2 cannot hold (also with `--no-input-errors`); and the protocol
+  ends after one trivial round, where an input error of weight 1 and one fault
+  can leave a weight-2 error (input errors only).
+
 ## Tests
 
 `make check` runs four test programs:

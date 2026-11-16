@@ -15,15 +15,15 @@ from pathlib import Path
 # Native wall time in seconds (ftec-verify --fqcv=image, 2 vCPU), measured on
 # the protocols as shipped. None: did not finish within 2000 s.
 NATIVE_SECONDS = {
-    "CB18_[[17,1,5]]_plain": 169,
+    "CB18_[[17,1,5]]_plain": 176,
     "CB18_[[25,1,5]]_plain": 212,
     "CB18_[[35,1,5]]_plain": 750,
     "CB18_[[45,1,5]]_plain": 2240,
     "CB18_[[49,1,7]]_plain": None,
-    "Du24_[[17,1,5]]_plain": 203,
+    "Du24_[[17,1,5]]_plain": 307,
     "Du24_[[17,1,5]]": 153,
     "Du24[[19,1,5]]": 507,
-    "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T": 251,
+    "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T": 267,
     "LL25_[[17,1,5]]_[2,2,2,1,1]^T": 304,
     "LL25_[[19,1,5]]_[1,1,1,...]^T": 456,
     "LL25_[[19,1,5]]_[2,2,2,1,1,1]^T": 543,
@@ -33,12 +33,14 @@ NATIVE_SECONDS = {
 # Verdicts of the larger protocols, from the same native runs (tests/expected.txt
 # covers only distance 3).
 KNOWN_VERDICTS = {
-    "Du24_[[17,1,5]]_plain": "min_t=2 failures=36",
+    "Du24_[[17,1,5]]_plain": "min_t=2 failures=36 invalid=52",
+    "CB18_[[17,1,5]]_plain": "min_t=-1 failures=0 invalid=0",
+    "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T": "min_t=-1 failures=0 invalid=4016",
     "Du24_[[17,1,5]]": "min_t=2 failures=36",
     **{name: "min_t=-1 failures=0" for name in (
-        "CB18_[[17,1,5]]_plain", "CB18_[[25,1,5]]_plain",
+        "CB18_[[25,1,5]]_plain",
         "CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain", "Du24[[19,1,5]]",
-        "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T", "LL25_[[17,1,5]]_[2,2,2,1,1]^T",
+        "LL25_[[17,1,5]]_[2,2,2,1,1]^T",
         "LL25_[[19,1,5]]_[1,1,1,...]^T", "LL25_[[19,1,5]]_[2,2,2,1,1,1]^T")},
 }
 

@@ -45,7 +45,8 @@
     if (!failures) return null;
     const invalid = /invalid=(\d+)/.exec(p.expected);
     if (failures[1] !== '0') return { good: false, text: `not correctable at t = ${minT ? minT[1] : '?'}` };
-    if (invalid && invalid[1] !== '0') return { good: false, text: 'control flow not valid' };
+    if (!invalid) return { good: true, text: 'correctable' };
+    if (invalid[1] !== '0') return { good: false, text: 'control flow not valid' };
     return { good: true, text: 'fault tolerant' };
   }
   function codeOf(files, entry) {
