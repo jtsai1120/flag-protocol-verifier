@@ -74,13 +74,13 @@
       <div class="ref-body">
         <p>A subset of C++17, interpreted:</p>
         <ul>
-          <li>free functions (no overloading), lambdas, global and local variables, <code>using</code> aliases;</li>
+          <li>free functions (no overloading), lambdas, global and local variables, <code>using</code> aliases, and <code>std::ostream &amp;operator&lt;&lt;(std::ostream &amp;, const T &amp;)</code> for printing your own way;</li>
           <li><code>if</code>/<code>else</code> (with an initializer declaration), <code>for</code>, range-<code>for</code>, <code>while</code>, <code>do</code>, <code>break</code>, <code>continue</code>, <code>return</code>, structured bindings of <code>std::pair</code> and <code>meas_result</code>;</li>
           <li><code>bool</code>, <code>char</code>, the integer types, <code>double</code>, <code>std::string</code>, <code>std::vector</code>, <code>std::pair</code>, <code>std::optional</code>, and SPBDD's <code>context</code>, <code>pset</code>, <code>code</code>, <code>meas_result</code>;</li>
           <li><code>std::cout</code> with <code>std::endl</code>, <code>std::setw</code>, <code>std::setprecision</code>, <code>std::fixed</code>, <code>std::boolalpha</code>; <code>std::to_string</code>, <code>std::min</code>, <code>std::max</code>, <code>static_cast</code>.</li>
         </ul>
         <p>Not supported: <code>struct</code> and <code>class</code>, templates of your own, pointers, exceptions, and the rest of the standard library, such as <code>std::map</code>.</p>
-        <p>One extension: <code>std::cout &lt;&lt; s</code> prints a <code>pset</code> as {A, B, …} (its first 32 elements) and a <code>std::vector</code> as [a, b, …]. Real C++ needs a loop for that, as in the examples.</p>
+        <p>One extension: <code>std::cout &lt;&lt; s</code> prints a <code>pset</code> as {A, B, …} (its first 32 elements) and a <code>std::vector</code> as [a, b, …]. Real C++ needs an <code>operator&lt;&lt;</code> for that, as the examples define.</p>
       </div>
     </details>
   </section>
