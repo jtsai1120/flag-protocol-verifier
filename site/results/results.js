@@ -228,7 +228,7 @@
         dist = r.d;
         body.append(el('tr', { className: 'dist' }, el('th', { colSpan: cols.length + 2, textContent: `Distance ${r.d}` })));
       }
-      const tr = el('tr', {}, el('td', { textContent: r.name, title: r.note || '' }), el('td', { className: 'code', textContent: `[[${r.n},${r.k},${r.d}]]` }));
+      const tr = el('tr', {}, el('td', { textContent: r.name.replace(/_/g, '_\u200b'), title: r.note || '' }), el('td', { className: 'code', textContent: `[[${r.n},${r.k},${r.d}]]` }));
       if (r.note && Object.keys(r.runs).length === 0) {
         tr.append(el('td', { colSpan: Math.max(cols.length, 1), className: 'v-none', textContent: r.note }));
       } else {

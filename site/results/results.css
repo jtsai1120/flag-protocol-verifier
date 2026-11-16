@@ -66,3 +66,8 @@ table.results thead th:first-child { left: 0; z-index: 2; }
 @media (max-width: 720px) {
   table.results td.code, table.results thead th:nth-child(2) { display: none; }
 }
+
+/* On phones, wrap long protocol names so the data columns stay in view. */
+@media (max-width: 720px) {
+  table.results tbody td:first-child { white-space: normal; overflow-wrap: break-word; min-width: 7.5rem; max-width: 9.5rem; }
+}

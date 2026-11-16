@@ -2,7 +2,8 @@
 """Publish web/results.json (from tools/site_bench.py) for the results page.
 
 Adds a note for every bundled protocol without runs, and the verifier commit
-the data were measured with (results.json's "verifier", else HEAD).
+the data were measured with (results.json's "verifier", else the last commit
+that changed the verifier's sources).
 
 usage: results_json.py web/results.json protocols site/results/results.json
 """
@@ -25,7 +26,7 @@ for d in sorted(p.parent for p in protocols.glob("*/*.fpdl")):
         data["protocols"][d.name] = NOT_RUN.get(d.name, "not run yet")
 if "verifier" not in data:
     try:
-        data["verifier"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True,
+        data["verifier"] = subprocess.run(["git", "log", "-1", "--format=%h", "--", "src", "include", "third_party"], capture_output=True,
                                           text=True, check=True).stdout.strip()
     except Exception:
         data["verifier"] = ""
