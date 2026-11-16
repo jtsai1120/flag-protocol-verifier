@@ -75,7 +75,12 @@
     <h2>What it checks</h2>
     <div class="doc-body">
       <p>A flag protocol measures stabilizers with circuits that use extra flag qubits. It then decides adaptively, from the syndromes and flags it has seen, when to stop and what to decode. The protocol is fault tolerant if every run with at most <i>t</i> = ⌊(<i>d</i>−1)/2⌋ faults ends in a state the decoder can correct.</p>
-      <p>The verifier tests exactly that. For every execution path of the protocol and every measurement record along it, it builds the set of data errors that up to <i>t</i> faults can leave behind. It then asks whether that set holds two errors <i>E</i><sub>1</sub>, <i>E</i><sub>2</sub> that the record cannot tell apart, yet whose product <i>E</i><sub>1</sub><i>E</i><sub>2</sub> is a non-trivial logical operator, an element of <i>N</i>(<i>S</i>)∖<i>S</i>. Such a pair means correcting one error damages the encoded state under the other. If no reachable set contains such a pair, the protocol is fault tolerant.</p>
+      <p>The verifier tests exactly that, following <i>Formal Verification of Flagged Fault-Tolerant Error Correction Protocols</i>: a protocol is fault tolerant exactly when it is valid and correctable. It checks three things.</p>
+      <ul>
+        <li><b>Circuit validity.</b> Every extraction circuit measures the generators it declares, lets data errors through unchanged, has no random outcome, and leaves the encoded state alone.</li>
+        <li><b>Correctability.</b> For every execution path and every measurement record along it, the verifier builds the set of data errors that an input error of weight <i>r</i> and <i>s</i> faults can leave behind, with <i>r</i> + <i>s</i> ≤ <i>t</i>. That set must not hold two errors <i>E</i><sub>1</sub>, <i>E</i><sub>2</sub> with the same syndrome whose product is a non-trivial logical operator, an element of <i>N</i>(<i>S</i>)∖<i>S</i>. Such a pair means correcting one error damages the encoded state under the other.</li>
+        <li><b>Protocol validity.</b> At every terminal, the record must give the decoder enough to act on: all remaining errors share one syndrome (Condition 1), or the record ends in enough identical, unflagged rounds of flag circuits for the faults it has exposed (Condition 2), or every error from <i>s</i> faults is within weight <i>s</i> of the code space (Condition 3). A protocol that ends without decoding needs Condition 3.</li>
+      </ul>
       <p>Every two-qubit gate is a fault location, where a fault is any Pauli on the gate’s two qubits. Single-qubit gates, preparations and measurements are taken as fault free, which is the model these protocols assume. Error sets are kept as decision diagrams through <a href="https://github.com/fmlab-iis/spbdd">SPBDD</a>, so the verifier never lists errors one by one.</p>
     </div>
   </div>
@@ -103,16 +108,28 @@ tp:
 <pre><code>$ ./build/ftec-verify protocol.fpdl
 protocol        : my_protocol
 code            : [[5,1,3]], tau = 1
+input errors    : r + s <= tau
 paths reached   : 1 of 1
 records reached : 16
 circuits run    : 1
 
+correctability
 11 unprotected path(s); first failure at t = 1
 
   path 0  t=1  record=0000
         IIIIZ and IIYZX share syndrome 0100 but differ logically (00 vs 11)
-  ...</code></pre>
-      <p>Take the first line. With one fault, the round can measure <code>0000</code> and leave either <code>IIIIZ</code> or <code>IIYZX</code> on the data. The second is a hook error: one fault at a gate part-way through a check, whose part on the syndrome qubit spread to the data qubits the check couples after it. The two errors have the same syndrome, <code>0100</code>, but differ by a logical operator, so no correction is right for both. This is the failure flag qubits exist to catch. The flagged protocols in the repository, such as Chao &amp; Reichardt’s, pass.</p>
+  ...
+
+protocol validity
+terminal records: Cond 1 2, Cond 2 0, Cond 3 0
+14 invalid terminal record(s) on 1 path(s)
+
+  path 0  decode  record=0000
+        Cond 1: IIIII and IIIZI differ on XZZXI; Cond 3: ...
+
+FTEC            : rejected</code></pre>
+      <p>Take the first line. With one fault, the round can measure <code>0000</code> and leave either <code>IIIIZ</code> or <code>IIYZX</code> on the data. The second is a hook error: one fault at a gate part-way through a check, whose part on the syndrome qubit spread to the data qubits the check couples after it. The two errors have the same syndrome, <code>0100</code>, but differ by a logical operator, so no correction is right for both. This is the failure flag qubits exist to catch.</p>
+      <p>The control flow is not valid either. After one round that measured <code>0000</code>, the data may be clean or may carry <code>IIIZI</code>, left by a fault after the check that would have seen it; the two have different syndromes, and with a single round the decoder has nothing to tell them apart by. The flagged protocols in the repository, such as Chao &amp; Reichardt’s, pass all three checks.</p>
       <p><a href="playground/">Open the playground</a> and choose <b>New</b> to run this protocol, or pick any bundled one.</p>
     </div>
   </div>
@@ -154,7 +171,9 @@ cd flag-protocol-verifier</code></pre>
           <tr><td><code>--max-paths=N</code></td><td><code>5000</code></td><td>Give up past this many symbolic paths.</td></tr>
           <tr><td><code>--first</code></td><td>off</td><td>Stop at the first unprotected path.</td></tr>
           <tr><td><code>--dag</code></td><td>off</td><td>Print the merged path structure and exit without verifying.</td></tr>
-          <tr><td><code>--skip-se-check</code></td><td>off</td><td>Verify the circuits as written even when they do not measure the declared generators (see below).</td></tr>
+          <tr><td><code>--no-input-errors</code></td><td>off</td><td>Start every execution from an error-free input (<i>r</i> = 0).</td></tr>
+          <tr><td><code>--no-validity</code></td><td>off</td><td>Skip the protocol validity check.</td></tr>
+          <tr><td><code>--skip-circuit-check</code></td><td>off</td><td>Verify the circuits as written even when they are not valid (see below).</td></tr>
         </tbody>
       </table></div>
       <p>To build against another SPBDD, use <code>make SPBDD_REF=&lt;commit&gt;</code> after <code>make distclean</code>, or <code>make SPBDD_SRC=/path/to/spbdd</code> to use a checkout as it is.</p>
@@ -167,11 +186,13 @@ cd flag-protocol-verifier</code></pre>
     <h2>How it works</h2>
     <div class="doc-body">
       <h3>The circuits are checked first</h3>
-      <p>Before anything runs, every extraction circuit is checked against its declaration. Each syndrome measurement is traced back through the ideal circuit to its start, and what it observes on the data must be the generator that <code>g:</code> lists for that bit. Each flag measurement must observe nothing but a stabilizer. A circuit wired to the wrong qubit, using the wrong Pauli, measuring in the wrong basis, or reading its bits in the wrong order is rejected, with the line and what it measures instead. Without this check, such a circuit would be verified as written and could still pass.</p>
+      <p>Before anything runs, every extraction circuit is checked against its declaration by propagating signed Pauli operators through the ideal circuit. Each syndrome measurement, traced back to the start, must observe the generator that <code>g:</code> lists for that bit; every measurement of any ancilla must observe a stabilizer, so that its outcome is not random; data errors must come out as themselves up to a stabilizer; and the logical operators must come through unchanged. A circuit wired to the wrong qubit, using the wrong Pauli, measuring in the wrong basis, reading its bits in the wrong order, or scheduled so that an outcome is random is rejected, with the line and what it measures instead. Without this check, such a circuit would be verified as written and could still pass.</p>
       <h3>Paths become a trie</h3>
       <p>The FPDL front end expands the protocol symbolically into every path its control flow allows. It doubles the bound until no path is cut short, and checks that the terminal conditions are mutually exclusive. Paths share long prefixes, so they are merged into a trie and walked depth first. Each extraction circuit then runs once per prefix instead of once per path, and only the states on the current root-to-node chain are alive.</p>
       <h3>States are families of Pauli sets</h3>
-      <p>A state is the family of error sets indexed by fault count 0…<i>t</i>. Running a circuit propagates every set through its gates. At each two-qubit gate, the fault-<i>k</i> set spawns into the fault-(<i>k</i>+1) set, and each measurement splits the state by outcome. Two outcomes are different records, so they never merge. A repeated state is recognised by its diagram’s root node and its result reused.</p>
+      <p>A state is the family of error sets indexed by (<i>r</i>, <i>s</i>): input weight <i>r</i> and fault count <i>s</i>, with <i>r</i> + <i>s</i> ≤ <i>t</i>. Running a circuit propagates every set through its gates. At each two-qubit gate, the (<i>r</i>, <i>s</i>) set spawns into the (<i>r</i>, <i>s</i>+1) set, and each measurement splits the state by outcome. Two outcomes are different records, so they never merge. A repeated state is recognised by its diagram’s root node and its result reused.</p>
+      <h3>Validity at the terminals</h3>
+      <p>Conditions 1 and 3 are read off the state itself: no generator may split the union of its sets, and each (<i>r</i>, <i>s</i>) set must lie inside the errors of weight at most <i>s</i> times the stabilizer group. Condition 2 is read off the record: it is regrouped into rounds, the faults the record exposes are counted, and the circuits of the final rounds are checked for the flag condition by running each alone with up to <i>k</i> faults. Every invalid path is reported with a counterexample.</p>
       <h3>The final E1E2 query</h3>
       <p>At each terminal, SPBDD’s <code>code::find_qec_cond_violation</code> looks for two errors with the same syndrome whose product lies in <i>N</i>(<i>S</i>)∖<i>S</i>. It offers four ways to answer, with identical verdicts and different costs:</p>
       <div class="table-scroll"><table>

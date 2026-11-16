@@ -43,8 +43,11 @@
     const failures = /failures=(\d+)/.exec(p.expected);
     const minT = /min_t=(-?\d+)/.exec(p.expected);
     if (!failures) return null;
-    return failures[1] === '0' ? { good: true, text: 'fault tolerant' }
-                               : { good: false, text: `fails at t = ${minT ? minT[1] : '?'}` };
+    const invalid = /invalid=(\d+)/.exec(p.expected);
+    if (failures[1] !== '0') return { good: false, text: `not correctable at t = ${minT ? minT[1] : '?'}` };
+    if (!invalid) return { good: true, text: 'correctable' };
+    if (invalid[1] !== '0') return { good: false, text: 'control flow not valid' };
+    return { good: true, text: 'fault tolerant' };
   }
   function codeOf(files, entry) {
     const m = /\[\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\]/.exec(files[entry] || '');
@@ -86,7 +89,7 @@
       meta.append(`[[${p.n},${p.k},${p.d}]]`);
       const v = verdictOf(p);
       if (v) { meta.append(', '); meta.append(el('span', { className: v.good ? 'good' : 'bad', textContent: v.text })); }
-      if (p.se_check_fails) { meta.append(', '); meta.append(el('span', { className: 'bad', textContent: 'circuits fail the SE check' })); }
+      if (p.se_check_fails) { meta.append(', '); meta.append(el('span', { className: 'bad', textContent: 'circuits not valid' })); }
       if (p.native_seconds === null) meta.append(', over 2000 s natively');
       else if (p.native_seconds >= 1) meta.append(`, ${human(p.native_seconds * WASM_SLOWDOWN)} here`);
       if (ws && ws.edited) meta.append(', edited');
@@ -154,7 +157,7 @@
     if (!p) { note.textContent = 'Files stay in this browser. The .fpdl file’s relative paths resolve against the files listed here.'; return; }
     if (p.se_check_fails) {
       note.className = 'notice warn';
-      note.textContent = 'These circuits do not measure the generators the protocol declares, so the verifier stops before verifying. Run it to see where; tick “Skip the SE check” to verify the circuits as written anyway.';
+      note.textContent = 'These circuits are not valid: their parallel schedule makes syndrome bits random, so the verifier stops before verifying. Run it to see where; tick “Skip the circuit check” to verify the circuits as written anyway.';
     } else if (p.native_seconds === null) {
       note.className = 'notice warn';
       note.textContent = 'This protocol did not finish within 2000 s natively. It will very likely run out of time or memory here.';
@@ -275,8 +278,8 @@
       updateRunButton();
     } else if (data.type === 'out') {
       let cls = data.err ? 'err' : '';
-      if (/^\d+ unprotected path/.test(data.text)) cls = 'bad';
-      else if (/^no unprotected path found/.test(data.text)) cls = 'good';
+      if (/^\d+ (unprotected path|invalid terminal record)/.test(data.text) || /^FTEC\s*: rejected/.test(data.text)) cls = 'bad';
+      else if (/^(no unprotected path found|control flow is valid)/.test(data.text) || /^FTEC\s*: accepted/.test(data.text)) cls = 'good';
       line(data.text, cls);
     } else if (data.type === 'done') {
       line(`\n[exit ${data.rc}, ${(data.ms / 1000).toFixed(2)} s in the browser]`, 'sys');
@@ -303,7 +306,7 @@
     const args = ['ftec-verify', '/w/' + ws.entry, '--fqcv=' + $('fqcv').value];
     if ($('first').checked) args.push('--first');
     if ($('dag').checked) args.push('--dag');
-    if ($('skip-se').checked) args.push('--skip-se-check');
+    if ($('skip-se').checked) args.push('--skip-circuit-check');
     if ($('bound').value) args.push('--bound=' + parseInt($('bound').value, 10));
     if ($('max-paths').value) args.push('--max-paths=' + parseInt($('max-paths').value, 10));
 
