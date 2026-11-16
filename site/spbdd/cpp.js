@@ -14,7 +14,8 @@
 //       std::cout << (s * s).size() << std::endl;
 //   }
 //
-// Supported: free functions (no overloading), global and local variables,
+// Supported: free functions (no overloading), operator<< for std::ostream,
+// global and local variables,
 // `using` aliases, lambdas, if/else, for, range-for, while, do-while,
 // break/continue/return, structured bindings of pairs and meas_result, and
 // the usual operators. Types: bool, char, int (and the other integer types),
@@ -23,7 +24,8 @@
 // templates of your own, pointers, std::map and the rest of the library.
 //
 // One extension: `std::cout << s` prints a pset as {A, B, ...} (the first 32
-// elements), and a std::vector as [a, b, ...]. Real C++ needs a loop for that.
+// elements), and a std::vector as [a, b, ...], unless the program defines its
+// own operator<<. Real C++ needs that operator<<.
 
 (function (global) {
   'use strict';
@@ -117,7 +119,7 @@
                              'uint64_t', 'uint32_t', 'ptrdiff_t', 'uint8_t', 'int8_t']);
   const SIMPLE = {
     void: 'void', bool: 'bool', char: 'char', double: 'double', float: 'double', auto: 'auto',
-    string: 'string', pset: 'pset', context: 'context', code: 'code', meas_result: 'meas',
+    string: 'string', pset: 'pset', context: 'context', code: 'code', meas_result: 'meas', ostream: 'ostream',
     violation: 'violation', fqcv_method: 'fqcv_method',
   };
   const TEMPLATES = new Set(['vector', 'pair', 'optional', 'initializer_list', 'function']);
@@ -217,7 +219,7 @@
 
     // ---- top level ----
     program() {
-      const funcs = new Map(), globals = [];
+      const funcs = new Map(), globals = [], ops = [];
       while (this.cur.k !== 'eof') {
         if (this.eat(';')) continue;
         if (this.is('using')) { const s = this.usingDecl(); if (s) globals.push(s); continue; }
@@ -227,6 +229,17 @@
         const line = this.cur.line;
         const type = this.tryType();
         if (!type) throw new CppError(`expected a declaration but found '${this.cur.v}'`, line);
+        if (this.is('operator')) {                     // std::ostream &operator<<(std::ostream &, const T &)
+          this.p++;
+          if (!this.is('<<')) throw new CppError(`only operator<< can be defined in the playground, not operator${this.cur.v}`, line);
+          this.p++;
+          const params = this.params();
+          if (this.eat(';')) continue;
+          const body = this.block();
+          if (params.length !== 2 || params[0].type.name !== 'ostream') throw new CppError('operator<< takes (std::ostream &, const T &)', line);
+          ops.push({ k: 'func', name: 'operator<<', ret: type, params, body, line });
+          continue;
+        }
         if (this.cur.k === 'id' && this.peek().v === '(' && this.looksLikeFunction()) {
           const name = this.ident();
           const params = this.params();
@@ -238,7 +251,7 @@
         }
         globals.push(this.declRest(type, line));
       }
-      return { funcs, globals };
+      return { funcs, globals, ops };
     }
 
     // After `type name (`: is it a function (parameters) or an object with constructor arguments?
@@ -813,6 +826,19 @@
         default: throw new CppError(`cannot print ${desc(x)}`, line);
       }
     }
+    // Does a value fit a parameter type exactly (for choosing an operator<< overload)?
+    function matchesType(x, type) {
+      if (type.name === 'auto') return false;
+      if (type.name === 'vector') {
+        if (x.t !== 'vector') return false;
+        const et = type.args[0];
+        return !x.et || !et || et.name === 'auto' || x.et.name === et.name;
+      }
+      if (type.name === 'string') return isStr(x);
+      if (type.name === 'optional') return x.t === 'optional';
+      return x.t === type.name;
+    }
+
     function streamOut(stream, x, line) {
       if (x.t === 'manip') {
         switch (x.name) {
@@ -828,6 +854,8 @@
         }
         return;
       }
+      const op = prog.ops.find(f => matchesType(x, f.params[1].type));
+      if (op) { invoke({ t: 'func', decl: op, env: top }, [new Cell(stream), new Cell(x)], line); return; }
       let s = show(x, line);
       if (out.width > s.length) s = ' '.repeat(out.width - s.length) + s;
       out.width = 0;

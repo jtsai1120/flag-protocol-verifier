@@ -4,27 +4,27 @@
 #include <string>
 using namespace spbdd;
 
-// Print a set as {A, B, ...}.
-void print(const std::string &name, const pset &s) {
-    std::cout << name << " = {";
+// Print a set as {A, B, ...}, so that std::cout << s works.
+std::ostream &operator<<(std::ostream &os, const pset &s) {
+    os << '{';
     bool first = true;
     s.for_each_element([&](const std::string &e) {
-        std::cout << (first ? "" : ", ") << e;
+        os << (first ? "" : ", ") << e;
         first = false;
         return true;   // keep going
     });
-    std::cout << "}\n";
+    return os << '}';
 }
 
 int main() {
     context ctx(2);   // two qubits; only one context can be alive at a time
 
     pset s = ctx.from_list({"XI", "ZZ"});
-    print("s", s);
-    print("s * s", s * s);   // setwise product, phases ignored
-    std::cout << "|s * s| = " << (s * s).size() << '\n';
-    print("s | {YY}", s | ctx.from_str("YY"));
-    print("s & {ZZ}", s & ctx.from_str("ZZ"));
-    print("<XI, ZZ>", ctx.generated_by({"XI", "ZZ"}));
+    std::cout << "s        = " << s << '\n';
+    std::cout << "s * s    = " << s * s << '\n';   // setwise product, phases ignored
+    std::cout << "|s * s|  = " << (s * s).size() << '\n';
+    std::cout << "s | {YY} = " << (s | ctx.from_str("YY")) << '\n';
+    std::cout << "s & {ZZ} = " << (s & ctx.from_str("ZZ")) << '\n';
+    std::cout << "<XI, ZZ> = " << ctx.generated_by({"XI", "ZZ"}) << '\n';
     std::cout << "all two-qubit Paulis: " << ctx.all().size() << '\n';
 }
