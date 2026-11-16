@@ -64,10 +64,10 @@
 <rect class="meter" x="490" y="241" width="40" height="28" rx="2"/><text class="meter-t" x="510" y="259" text-anchor="middle">Mz</text>
 </svg>
     <figcaption>A weight-4 Z check with one flag qubit, the circuit of Chamberland &amp; Beverland’s Fig.&nbsp;2(b). A fault on <span class="mono">s</span> between the two flag couplings spreads to two data qubits and raises the flag.</figcaption>
-    <div class="verdict" aria-label="Verifier output for LL25 [[5,1,3]] [2,2]^T">1 unprotected path(s); first failure at t = 1
+    <div class="verdict" aria-label="Verifier output for one unflagged round of the [[5,1,3]] code">11 unprotected path(s); first failure at t = 1
 
-  path 1  t=1  record=0001,01|0011
-        <span class="x">IIZIX and IZIIZ share syndrome 0001 but differ logically (01 vs 11)</span></div>
+  path 0  t=1  record=0000
+        <span class="x">IIIIZ and IIYZX share syndrome 0100 but differ logically (00 vs 11)</span></div>
   </figure>
 </section>
 
@@ -86,33 +86,35 @@
   <div class="doc-grid">
     <h2>A worked example</h2>
     <div class="doc-body">
-      <p>The flag-sharing protocol for the [[5,1,3]] code from Liou &amp; Lai (arXiv:2407.00607), in its fully parallel [2,2]<sup>T</sup> arrangement, runs one flagged extraction round. It stops if nothing fires; otherwise it runs one unflagged round and decodes from all three results:</p>
-<pre><code>af:
+      <p>The smallest protocol worth checking measures the four generators of the [[5,1,3]] code once, with one unflagged syndrome qubit per generator, and decodes what it saw:</p>
+<pre><code>gvar:
+    bit[4] s = ⊥;
+
+tc:
+    1: (s != ⊥)
+
+af:
     while(!tc) {
-        (m,f) = FSE_f();
+        (s,) = FSE_b();
     }
 
 tp:
-    1: { end(); }
-    2: {
-        bit[4] mp = ⊥;
-        (mp,) = FSE_b();
-        decode(mr[m, f, mp]);
-    }</code></pre>
-      <p>Verifying it finds one record that breaks the protocol:</p>
-<pre><code>$ ./build/ftec-verify "protocols/LL25_[[5,1,3]]_[2,2]^T/LL25_[[5,1,3]]_[2,2]^T.fpdl"
-protocol        : LL25_[[5,1,3]]_[2,2]^T
+    1: { decode(mr[s]); }</code></pre>
+      <p>One round without flags is not fault tolerant, and the verifier says why:</p>
+<pre><code>$ ./build/ftec-verify protocol.fpdl
+protocol        : my_protocol
 code            : [[5,1,3]], tau = 1
-paths reached   : 2 of 2
-records reached : 153
-circuits run    : 36
+paths reached   : 1 of 1
+records reached : 16
+circuits run    : 1
 
-1 unprotected path(s); first failure at t = 1
+11 unprotected path(s); first failure at t = 1
 
-  path 1  t=1  record=0001,01|0011
-        IIZIX and IZIIZ share syndrome 0001 but differ logically (01 vs 11)</code></pre>
-      <p>Read the record left to right: the flagged round measured syndrome <code>0001</code> with flags <code>01</code>, and the unflagged round measured <code>0011</code>. A single fault can produce this record with either <code>IIZIX</code> or <code>IZIIZ</code> on the data. The two errors differ by a logical operator, so whichever one the decoder corrects, the other one is left as a logical error. The same protocol in its non-transposed [2,2] arrangement fails on four records; the [1,1,1,1]<sup>T</sup> arrangement passes.</p>
-      <p><a href="playground/?p=LL25_%5B%5B5,1,3%5D%5D_%5B2,2%5D%5ET">Run this example in the playground</a>.</p>
+  path 0  t=1  record=0000
+        IIIIZ and IIYZX share syndrome 0100 but differ logically (00 vs 11)
+  ...</code></pre>
+      <p>Take the first line. With one fault, the round can measure <code>0000</code> and leave either <code>IIIIZ</code> or <code>IIYZX</code> on the data. The second is a hook error: one fault at a gate part-way through a check, whose part on the syndrome qubit spread to the data qubits the check couples after it. The two errors have the same syndrome, <code>0100</code>, but differ by a logical operator, so no correction is right for both. This is the failure flag qubits exist to catch. The flagged protocols in the repository, such as Chao &amp; Reichardt’s, pass.</p>
+      <p><a href="playground/">Open the playground</a> and choose <b>New</b> to run this protocol, or pick any bundled one.</p>
     </div>
   </div>
 </section>
@@ -153,6 +155,7 @@ cd flag-protocol-verifier</code></pre>
           <tr><td><code>--max-paths=N</code></td><td><code>5000</code></td><td>Give up past this many symbolic paths.</td></tr>
           <tr><td><code>--first</code></td><td>off</td><td>Stop at the first unprotected path.</td></tr>
           <tr><td><code>--dag</code></td><td>off</td><td>Print the merged path structure and exit without verifying.</td></tr>
+          <tr><td><code>--skip-se-check</code></td><td>off</td><td>Verify the circuits as written even when they do not measure the declared generators (see below).</td></tr>
         </tbody>
       </table></div>
       <p>To build against another SPBDD, use <code>make SPBDD_REF=&lt;commit&gt;</code> after <code>make distclean</code>, or <code>make SPBDD_SRC=/path/to/spbdd</code> to use a checkout as it is.</p>
@@ -164,6 +167,8 @@ cd flag-protocol-verifier</code></pre>
   <div class="doc-grid">
     <h2>How it works</h2>
     <div class="doc-body">
+      <h3>The circuits are checked first</h3>
+      <p>Before anything runs, every extraction circuit is checked against its declaration. Each syndrome measurement is traced back through the ideal circuit to its start, and what it observes on the data must be the generator that <code>g:</code> lists for that bit. Each flag measurement must observe nothing but a stabilizer. A circuit wired to the wrong qubit, using the wrong Pauli, measuring in the wrong basis, or reading its bits in the wrong order is rejected, with the line and what it measures instead. Without this check, such a circuit would be verified as written and could still pass.</p>
       <h3>Paths become a trie</h3>
       <p>The FPDL front end expands the protocol symbolically into every path its control flow allows. It doubles the bound until no path is cut short, and checks that the terminal conditions are mutually exclusive. Paths share long prefixes, so they are merged into a trie and walked depth first. Each extraction circuit then runs once per prefix instead of once per path, and only the states on the current root-to-node chain are alive.</p>
       <h3>States are families of Pauli sets</h3>
