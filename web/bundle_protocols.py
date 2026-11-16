@@ -44,6 +44,11 @@ KNOWN_VERDICTS = {
 }
 
 
+# Protocols whose circuits fail the SE check (ftec-verify stops before
+# verifying them): some syndrome bits are random, or land in the wrong position.
+SE_CHECK_FAILS = {"LL25_[[5,1,3]]_[2,2]", "LL25_[[5,1,3]]_[2,2]^T", "Du24_[[17,1,5]]", "Du24_[[17,1,5]]_plain"}
+
+
 def main():
     root, expected_file, out = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
     expected = {}
@@ -66,7 +71,8 @@ def main():
             "name": d.name,
             "entry": entry,
             "n": n, "k": k, "d": dist,
-            "expected": expected.get(d.name) or KNOWN_VERDICTS.get(d.name),
+            "expected": None if d.name in SE_CHECK_FAILS else expected.get(d.name) or KNOWN_VERDICTS.get(d.name),
+            "se_check_fails": d.name in SE_CHECK_FAILS,
             "native_seconds": NATIVE_SECONDS.get(d.name, 0.1 if dist <= 3 else None),
             "files": files,
         })

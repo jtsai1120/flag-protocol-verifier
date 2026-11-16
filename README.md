@@ -74,6 +74,7 @@ What `make` does:
 | `--max-paths=N` | `5000` | Give up past this many symbolic paths |
 | `--first` | off | Stop at the first unprotected path |
 | `--dag` | off | Print the merged path structure and exit without verifying |
+| `--skip-se-check` | off | Verify the circuits as written even when they do not measure the declared generators |
 
 The output lists:
 
@@ -142,12 +143,45 @@ Reference measurements (2 vCPU, 7.8 GiB, two runs in parallel):
 The bottleneck is state propagation and fault injection before the final
 query. The query itself is about 0.5% of the total.
 
+### The SE circuit check
+
+Before verifying, `ftec-verify` checks every extraction circuit against its SE
+declaration (`src/ftec/se_check.cpp`):
+
+- Each measurement into the syndrome register is propagated backwards through
+  the ideal circuit to its start (Heisenberg picture, phases ignored). Ancillas
+  start in |0>, and so does any qubit after a reset.
+- What the measurement observes on the data must be the generator `g:` lists at
+  that bit's index.
+- The outcome must not be random, and must not depend on an earlier
+  measurement of a reused qubit.
+- Each flag measurement must observe only a stabilizer.
+
+Without this check, a circuit wired to the wrong qubit, using the wrong Pauli,
+measuring in the wrong basis or reading bits out of order would be verified as
+written, and could still pass. The check rejects such circuits and names the
+line and what it measures instead; `--skip-se-check` verifies them anyway.
+
+Four bundled protocols fail the check, and their verdicts should not be relied
+on until their circuits are fixed:
+
+- LL25 [[5,1,3]] [2,2] and [2,2]^T: some syndrome bits are random, and one
+  measures the fifth cyclic generator instead of the declared one.
+- Du24 [[17,1,5]] (parallel and plain): some flag qubits are coupled an odd
+  number of times, which makes syndrome and flag bits random, and two pairs of
+  syndrome bits are read out in swapped positions.
+
+An independent simulation with [stim](https://github.com/quantumlib/Stim)
+agrees on which bits are random.
+
 ## Tests
 
-`make check` runs three test programs:
+`make check` runs four test programs:
 
 - `parser_tests` parses every FPDL file under `protocols/`.
 - `qasm_tests` parses every QASM circuit.
+- `se_check_tests` runs the SE check on every protocol (the four above must
+  fail it, the rest must pass) and on ten deliberately broken circuits.
 - `fqcv_tests` verifies every distance-3 protocol once with each of the four
   methods. The four results must agree with each other and with the verdicts
   recorded in `tests/expected.txt`. Those verdicts were cross-checked against

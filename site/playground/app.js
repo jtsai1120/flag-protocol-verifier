@@ -86,6 +86,7 @@
       meta.append(`[[${p.n},${p.k},${p.d}]]`);
       const v = verdictOf(p);
       if (v) { meta.append(', '); meta.append(el('span', { className: v.good ? 'good' : 'bad', textContent: v.text })); }
+      if (p.se_check_fails) { meta.append(', '); meta.append(el('span', { className: 'bad', textContent: 'circuits fail the SE check' })); }
       if (p.native_seconds === null) meta.append(', over 2000 s natively');
       else if (p.native_seconds >= 1) meta.append(`, ${human(p.native_seconds * WASM_SLOWDOWN)} here`);
       if (ws && ws.edited) meta.append(', edited');
@@ -151,7 +152,10 @@
     const note = $('estimate');
     note.className = 'notice';
     if (!p) { note.textContent = 'Files stay in this browser. The .fpdl file’s relative paths resolve against the files listed here.'; return; }
-    if (p.native_seconds === null) {
+    if (p.se_check_fails) {
+      note.className = 'notice warn';
+      note.textContent = 'These circuits do not measure the generators the protocol declares, so the verifier stops before verifying. Run it to see where; tick “Skip the SE check” to verify the circuits as written anyway.';
+    } else if (p.native_seconds === null) {
       note.className = 'notice warn';
       note.textContent = 'This protocol did not finish within 2000 s natively. It will very likely run out of time or memory here.';
     } else if (p.native_seconds >= 60) {
@@ -299,6 +303,7 @@
     const args = ['ftec-verify', '/w/' + ws.entry, '--fqcv=' + $('fqcv').value];
     if ($('first').checked) args.push('--first');
     if ($('dag').checked) args.push('--dag');
+    if ($('skip-se').checked) args.push('--skip-se-check');
     if ($('bound').value) args.push('--bound=' + parseInt($('bound').value, 10));
     if ($('max-paths').value) args.push('--max-paths=' + parseInt($('max-paths').value, 10));
 
@@ -447,7 +452,7 @@ h syn; m[3] = measure syn;
       else if (workspaces.has(name)) Object.assign(workspaces.get(name), { files: ws.files, entry: ws.entry, edited: true });
     }
     const wanted = new URLSearchParams(location.search).get('p');
-    select(workspaces.has(wanted) ? wanted : 'LL25_[[5,1,3]]_[2,2]^T');
+    select(workspaces.has(wanted) ? wanted : 'CR17_[[5,1,3]]');
   }).catch(err => {
     plist.textContent = '';
     plist.append(el('p', { className: 'notice warn', textContent: 'Could not load the bundled protocols (' + err.message + '). You can still add your own files.' }));
