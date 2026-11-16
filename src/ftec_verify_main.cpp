@@ -18,6 +18,7 @@
 #include <memory>
 #include <sstream>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -68,6 +69,9 @@ void usage(const char* argv0) {
         << "  --max-paths=N    give up past this many symbolic paths (default 5000)\n"
         << "  --first          stop at the first unprotected path\n"
         << "  --dag            print the merged path structure and exit\n"
+        << "  --no-input-errors\n"
+        << "                   start every run from an error-free input (r = 0)\n"
+        << "  --no-validity    skip the protocol validity check (Def. 3.9)\n"
         << "  --skip-circuit-check\n"
         << "                   verify the circuits as written even if they are not\n"
         << "                   valid (correct and deterministic)\n";
@@ -161,6 +165,10 @@ int main(int argc, char** argv) {
             options.stop_at_first_failure = true;
         } else if (arg == "--skip-circuit-check" || arg == "--skip-se-check") {
             skip_circuit_check = true;
+        } else if (arg == "--no-input-errors") {
+            spbdd_options.input_errors = false;
+        } else if (arg == "--no-validity") {
+            options.check_validity = false;
         } else if (arg == "--dag") {
             dag_only = true;
         } else if (arg.rfind("--", 0) == 0) {
@@ -238,25 +246,49 @@ int main(int argc, char** argv) {
                   << "BMC bound       : " << expansion.bound
                   << (bound ? " (given)" : " (found by doubling)") << "\n"
                   << "fqcv method     : " << spbdd_options.fqcv << "\n"
+                  << "input errors    : " << (spbdd_options.input_errors ? "r + s <= tau" : "none (r = 0)")
+                  << "\n"
                   << "paths reached   : " << result.paths_reached << " of " << dag.path_count
                   << "\n"
                   << "records reached : " << result.records_reached << "\n"
                   << "circuits run    : " << result.se_applications << "\n\n";
 
+        std::cout << "correctability\n";
         if (result.clean()) {
             std::cout << "no unprotected path found\n";
-            report_cost(traversal);
-            return 0;
+        } else {
+            std::cout << result.failures.size() << " unprotected path(s); first failure at t = "
+                      << result.min_fault_count << "\n\n";
+            for (const auto& failure : result.failures) {
+                std::cout << "  path " << failure.path_id << "  t=" << failure.failure.fault_count
+                          << "  record=" << failure.record_string() << "\n";
+                if (!failure.failure.detail.empty()) {
+                    std::cout << "        " << failure.failure.detail << "\n";
+                }
+            }
         }
 
-        std::cout << result.failures.size() << " unprotected path(s); first failure at t = "
-                  << result.min_fault_count << "\n\n";
-        for (const auto& failure : result.failures) {
-            std::cout << "  path " << failure.path_id << "  t=" << failure.failure.fault_count
-                      << "  record=" << failure.record_string() << "\n";
-            if (!failure.failure.detail.empty()) {
-                std::cout << "        " << failure.failure.detail << "\n";
+        if (result.validity_checked) {
+            std::cout << "\nprotocol validity\n"
+                      << "terminal records: Cond 1 " << result.by_condition[0] << ", Cond 2 "
+                      << result.by_condition[1] << ", Cond 3 " << result.by_condition[2] << "\n";
+            if (result.valid()) {
+                std::cout << "control flow is valid\n";
+            } else {
+                std::set<std::size_t> paths;
+                for (const auto& v : result.validity_failures) paths.insert(v.path_id);
+                std::cout << result.validity_failures.size() << " invalid terminal record(s) on "
+                          << paths.size() << " path(s)\n\n";
+                std::set<std::size_t> shown;
+                for (const auto& v : result.validity_failures) {
+                    if (!shown.insert(v.path_id).second) continue;   // one per path
+                    std::cout << "  path " << v.path_id << "  " << v.terminal_action
+                              << "  record=" << v.record_string() << "\n        " << v.reason
+                              << "\n";
+                }
             }
+            std::cout << "\nFTEC            : "
+                      << (result.clean() && result.valid() ? "accepted" : "rejected") << "\n";
         }
         report_cost(traversal);
         return 0;

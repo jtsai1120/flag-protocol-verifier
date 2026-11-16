@@ -185,9 +185,9 @@ protocol Bha23_[[7,1,3]]_fig5:
                 (sb,) = Z_SE_b();
                 m.push(sb);
                 switch(n) {
-                    1: { (s,) = IIIXXXX_b(); }
-                    2: { (s,) = IXXIIXX_b(); }
-                    3: { (s,) = XIXIXIX_b(); }
+                    4: { (s,) = IIIXXXX_b(); }
+                    5: { (s,) = IXXIIXX_b(); }
+                    6: { (s,) = XIXIXIX_b(); }
                 }
                 m.push(s);
                 decode(m);

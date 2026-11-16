@@ -1,5 +1,8 @@
 #include "ftec/verify.hpp"
 
+#include "ftec/circuit_check.hpp"
+#include "ftec/qasm.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <map>
@@ -34,7 +37,8 @@ std::string Outcome::to_string() const {
     return out;
 }
 
-std::string PathFailure::record_string() const {
+namespace {
+std::string record_text(const std::vector<RecordEntry>& record) {
     std::string out;
     for (std::size_t i = 0; i < record.size(); ++i) {
         if (i != 0) out += '|';
@@ -46,6 +50,10 @@ std::string PathFailure::record_string() const {
     }
     return out;
 }
+} // namespace
+
+std::string PathFailure::record_string() const { return record_text(record); }
+std::string ValidityFailure::record_string() const { return record_text(record); }
 
 namespace {
 
@@ -294,6 +302,7 @@ public:
                 note_failure(current, record, *failure);
                 if (options_.stop_at_first_failure) return false;
             }
+            if (options_.check_validity) check_validity(current, state, record);
             return true;
         }
 
@@ -353,6 +362,140 @@ private:
             PathFailure{terminal.path_id, terminal.terminal_action, record, failure});
     }
 
+    // ---- protocol validity -------------------------------------------------
+
+    void check_validity(const DagNode& terminal, Backend::StateId state,
+                        const std::vector<RecordEntry>& record) {
+        const auto facts = backend_.terminal_facts(state);
+        const bool ends  = terminal.terminal_action == "end";
+        std::string reason;
+        if (ends) {
+            if (facts.weight_bounded) { ++result_.by_condition[2]; return; }
+            reason = "ends without decoding, but " + facts.weight_detail;
+        } else {
+            if (facts.same_syndrome)  { ++result_.by_condition[0]; return; }
+            if (facts.weight_bounded) { ++result_.by_condition[2]; return; }
+            const auto why_not_2 = condition_2(record);
+            if (!why_not_2) { ++result_.by_condition[1]; return; }
+            reason = "Cond 1: " + facts.syndrome_detail + "; Cond 3: " + facts.weight_detail +
+                     "; Cond 2: " + *why_not_2;
+        }
+        result_.validity_failures.push_back(
+            ValidityFailure{terminal.path_id, terminal.terminal_action, record, reason});
+    }
+
+    // One round of syndrome extraction, reassembled from consecutive SEs.
+    struct Round {
+        std::map<std::size_t, bool> syndrome;   // generator index -> bit
+        bool                        flagged = false;
+        std::vector<std::size_t>    entries;    // into the record
+    };
+
+    // Which code generator each bit of an SE reports, or nullopt for a bit
+    // that is not one of them (a product, say).
+    const std::vector<std::optional<std::size_t>>& bits_of(const CircuitRef& circuit) {
+        const std::string key = circuit.qasm.string() + "\n" + circuit.se_name;
+        if (const auto found = bits_.find(key); found != bits_.end()) return found->second;
+        std::vector<std::optional<std::size_t>> bits;
+        for (const auto& g : circuit.measures) {
+            std::optional<std::size_t> index;
+            for (std::size_t i = 0; i < dag_.code.generators.size(); ++i) {
+                if (dag_.code.generators[i] == g) index = i;
+            }
+            bits.push_back(index);
+        }
+        return bits_.emplace(key, std::move(bits)).first->second;
+    }
+
+    bool flags_ignore(const CircuitRef& circuit) {
+        const std::string key = circuit.qasm.string();
+        if (const auto found = ignore_.find(key); found != ignore_.end()) return found->second;
+        const bool ok = flags_ignore_data(parse_qasm_file(circuit.qasm), circuit);
+        return ignore_.emplace(key, ok).first->second;
+    }
+
+    // Condition 2 read off the record. nullopt when it holds; otherwise why not.
+    std::optional<std::string> condition_2(const std::vector<RecordEntry>& record) {
+        const std::size_t generators = dag_.code.generators.size();
+        std::vector<Round> rounds;
+        bool readable = true;
+        for (std::size_t i = 0; i < record.size(); ++i) {
+            const CircuitRef& circuit = dag_.nodes[record[i].node].circuit;
+            const auto& bits = bits_of(circuit);
+            bool overlap = rounds.empty();
+            for (const auto& b : bits) {
+                if (!b) { readable = false; continue; }
+                if (!rounds.empty() && rounds.back().syndrome.count(*b)) overlap = true;
+            }
+            if (overlap) rounds.emplace_back();
+            Round& round = rounds.back();
+            for (std::size_t j = 0; j < bits.size() && j < record[i].outcome.syndrome.size(); ++j) {
+                if (bits[j]) round.syndrome[*bits[j]] = record[i].outcome.syndrome[j];
+            }
+            for (const bool f : record[i].outcome.flag) round.flagged = round.flagged || f;
+            round.entries.push_back(i);
+        }
+        if (!readable) return std::string("an SE measures something other than the code's generators");
+        if (rounds.empty()) return std::string("no syndrome was measured");
+
+        const auto full = [&](const Round& r) { return r.syndrome.size() == generators; };
+
+        // w: the faults the record exposes. A flag is one; so is a change of
+        // syndrome between consecutive unflagged full rounds, except that the
+        // change right after another one may be the same fault seen twice.
+        int  w = 0;
+        bool skip = false;
+        const Round* prev = nullptr;
+        for (const auto& r : rounds) {
+            if (r.flagged) { ++w; prev = nullptr; skip = false; continue; }
+            if (!full(r))  { prev = nullptr; skip = false; continue; }
+            if (prev) {
+                if (prev->syndrome != r.syndrome) {
+                    if (!skip) ++w;
+                    skip = !skip;
+                } else {
+                    skip = false;
+                }
+            }
+            prev = &r;
+        }
+
+        const int t = dag_.code.fault_budget();
+        if (w > t) return "the record exposes " + std::to_string(w) + " faults, more than t";
+        const std::size_t need = static_cast<std::size_t>(t - w + 1);
+        if (rounds.size() < need) {
+            return "w = " + std::to_string(w) + " needs " + std::to_string(need) +
+                   " repeated rounds, the record has " + std::to_string(rounds.size());
+        }
+        const Round& last = rounds.back();
+        for (std::size_t i = rounds.size() - need; i < rounds.size(); ++i) {
+            const Round& r = rounds[i];
+            if (!full(r) || r.flagged || r.syndrome != last.syndrome) {
+                return "w = " + std::to_string(w) + ", but the last " + std::to_string(need) +
+                       " rounds are not identical unflagged full rounds";
+            }
+        }
+        const int k = t - w;
+        for (std::size_t i = rounds.size() - need; i < rounds.size(); ++i) {
+            for (const std::size_t e : rounds[i].entries) {
+                const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
+                if (k > 0) {
+                    if (const auto problem = backend_.flag_condition(circuit, k)) {
+                        return circuit.se_name + " is not " + std::to_string(k) +
+                               "-flag: " + *problem;
+                    }
+                }
+                if (!flags_ignore(circuit)) {
+                    return circuit.se_name + " raises a flag without any fault";
+                }
+            }
+        }
+        return std::nullopt;
+    }
+
+    std::map<std::string, std::vector<std::optional<std::size_t>>> bits_;
+    std::map<std::string, bool>                                    ignore_;
+
     std::set<std::size_t> reached_;
     const Dag&           dag_;
     Backend&             backend_;
@@ -368,6 +511,7 @@ VerifyResult verify(const Dag& dag, Backend& backend, const VerifyOptions& optio
     result.tau      = dag.code.fault_budget();
 
     backend.begin(dag.code, result.tau);
+    result.validity_checked = options.check_validity;
 
     std::vector<RecordEntry> record;
     Walker walker(dag, backend, options, result);

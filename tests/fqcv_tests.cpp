@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -58,6 +59,13 @@ std::string summary(const ftec::VerifyResult& result) {
         out << " [path " << failure.path_id << " t=" << failure.failure.fault_count
             << " record=" << failure.record_string() << ']';
     }
+    // Protocol validity (Def. 3.9): terminal records settled by Cond 1/2/3,
+    // and the paths of those none settles.
+    out << " cond=" << result.by_condition[0] << '/' << result.by_condition[1] << '/'
+        << result.by_condition[2] << " invalid=" << result.validity_failures.size();
+    std::set<std::size_t> paths;
+    for (const auto& v : result.validity_failures) paths.insert(v.path_id);
+    for (const auto path : paths) out << " [invalid path " << path << ']';
     return out.str();
 }
 

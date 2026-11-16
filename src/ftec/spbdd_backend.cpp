@@ -146,6 +146,21 @@ public:
         tau_         = tau;
         generators_  = code.generators;
 
+        // Levels (r, s): input weight r, s circuit faults, r + s <= tau; in
+        // order of r + s, then r. A fault moves (r, s) to (r, s + 1).
+        levels_.clear();
+        for (int k = 0; k <= tau_; ++k) {
+            for (int r = 0; r <= (options_.input_errors ? k : 0); ++r) levels_.push_back({r, k - r});
+        }
+        succ_.assign(levels_.size(), -1);
+        for (std::size_t i = 0; i < levels_.size(); ++i) {
+            for (std::size_t j = 0; j < levels_.size(); ++j) {
+                if (levels_[j].first == levels_[i].first && levels_[j].second == levels_[i].second + 1) {
+                    succ_[i] = static_cast<int>(j);
+                }
+            }
+        }
+
         // Dynamic reordering stays off: it never paid on any protocol large
         // enough to time.
         spbdd::config config;
@@ -180,39 +195,7 @@ public:
         const Records&     records = records_for(circuit, program);
         grow_to(layout.total);
 
-        // One branch per distinct classical outcome so far. Branches whose
-        // bits agree are the same observation and are unioned, which is the
-        // same merge the driver does between nodes, applied within a circuit.
-        std::vector<Branch> branches;
-        branches.push_back(Branch{reset_ancillas(states_[id], layout), {}});
-        for (const auto& reg : program.bits) {
-            branches.front().bits.emplace(reg.name, std::vector<bool>(reg.width, false));
-        }
-
-        for (const auto& instruction : program.instructions) {
-            switch (instruction.kind) {
-                case QasmInstruction::Kind::Barrier:
-                    break;
-
-                case QasmInstruction::Kind::Gate:
-                    for (auto& branch : branches) {
-                        apply_gate(branch.by_t, instruction, layout);
-                    }
-                    break;
-
-                case QasmInstruction::Kind::Reset: {
-                    const std::vector<int> target{qubit_of(instruction.qubits[0], layout)};
-                    for (auto& branch : branches) {
-                        for (auto& level : branch.by_t) level.reset(target);
-                    }
-                    break;
-                }
-
-                case QasmInstruction::Kind::Measure:
-                    branches = split_on_measurement(branches, instruction, layout);
-                    break;
-            }
-        }
+        auto branches = simulate(reset_ancillas(states_[id], layout), program, layout, succ_);
 
         std::vector<std::pair<Outcome, StateId>> out;
         for (auto& branch : branches) {
@@ -243,12 +226,88 @@ public:
         return answer;
     }
 
+    TerminalFacts terminal_facts(StateId id) override {
+        if (const auto found = facts_cache_.find(id); found != facts_cache_.end()) return found->second;
+        const State& state = states_[id];
+        TerminalFacts facts;
+
+        pset all = ctx_->empty();
+        for (const auto& level : state) all = all | level;
+
+        // Condition 1: no generator splits the residual errors.
+        facts.same_syndrome = true;
+        for (const auto& g : generators_) {
+            const pset commuting = all & ctx_->commute_with(padded(g));
+            if (!commuting.is_empty() && commuting != all) {
+                facts.same_syndrome   = false;
+                facts.syndrome_detail = on_data(commuting.any_element().value_or("")) + " and " +
+                                        on_data((all - commuting).any_element().value_or("")) +
+                                        " differ on " + g;
+                break;
+            }
+        }
+
+        // Condition 3: (r, s) errors are within weight s of the code space.
+        facts.weight_bounded = true;
+        for (std::size_t i = 0; i < state.size(); ++i) {
+            const int s = levels_[i].second;
+            const pset outside = state[i] - within(s);
+            if (outside.is_empty()) continue;
+            facts.weight_bounded = false;
+            facts.weight_detail = on_data(outside.any_element().value_or("")) + " (input weight " +
+                           std::to_string(levels_[i].first) + ", " + std::to_string(s) +
+                           " fault(s)) has minimum weight above " + std::to_string(s);
+            break;
+        }
+        facts_cache_.emplace(id, facts);
+        return facts;
+    }
+
+    std::optional<std::string> flag_condition(const CircuitRef& circuit, int k) override {
+        const auto key = std::make_pair(circuit.qasm.string(), k);
+        if (const auto found = flag_cache_.find(key); found != flag_cache_.end()) return found->second;
+
+        const QasmProgram& program = program_for(circuit);
+        const Layout       layout  = layout_for(program, circuit);
+        const Records&     records = records_for(circuit, program);
+        grow_to(layout.total);
+
+        // Levels 0..k of faults in this circuit alone, no input error.
+        State start{ctx_->identity()};
+        std::vector<int> succ;
+        for (int s = 1; s <= k; ++s) {
+            start.push_back(ctx_->empty());
+            succ.push_back(s);
+        }
+        succ.push_back(-1);
+
+        std::optional<std::string> problem;
+        for (auto& branch : simulate(std::move(start), program, layout, succ)) {
+            if (records.flag) {
+                const auto flags = read_register(branch.bits, *records.flag, circuit);
+                if (std::find(flags.begin(), flags.end(), true) != flags.end()) continue;
+            }
+            for (int s = 1; s <= k && !problem; ++s) {
+                pset level = branch.by_t[static_cast<std::size_t>(s)];
+                level.reset(layout.ancillas);
+                const pset outside = level - within(s);
+                if (outside.is_empty()) continue;
+                problem = std::to_string(s) + " fault(s) raise no flag but leave " +
+                          on_data(outside.any_element().value_or("")) +
+                          ", of minimum weight above " + std::to_string(s);
+            }
+            if (problem) break;
+        }
+        flag_cache_.emplace(key, problem);
+        return problem;
+    }
+
     std::string describe(StateId id) const override {
         std::ostringstream out;
         out << std::fixed << std::setprecision(0);
-        for (std::size_t t = 0; t < states_[id].size(); ++t) {
-            if (t != 0) out << ' ';
-            out << 't' << t << '=' << states_[id][t].size();
+        for (std::size_t i = 0; i < states_[id].size(); ++i) {
+            if (i != 0) out << ' ';
+            out << 'r' << levels_[i].first << 's' << levels_[i].second << '=' << states_[id][i].size();
         }
         return out.str();
     }
@@ -334,6 +393,9 @@ private:
     void release() {
         step_cache_.clear();
         check_cache_.clear();
+        facts_cache_.clear();
+        flag_cache_.clear();
+        ws_.clear();
         buckets_.clear();
         programs_.clear();
         records_.clear();
@@ -352,13 +414,36 @@ private:
     void rebuild_code() {
         code_ = std::make_unique<spbdd::code>(*ctx_, generators_);
         nms_measured_ = false;
+        ws_.clear();
     }
 
+    std::string padded(const std::string& pauli) const {
+        return pauli + std::string(static_cast<std::size_t>(ctx_->num_qubits()) - pauli.size(), 'I');
+    }
+
+    std::string on_data(const std::string& pauli) const {
+        return pauli.substr(0, static_cast<std::size_t>(data_qubits_));
+    }
+
+    // Errors within weight s of the code space: (weight <= s on the data) * S.
+    const pset& within(int s) {
+        while (static_cast<int>(ws_.size()) <= s) {
+            std::vector<int> data(static_cast<std::size_t>(data_qubits_));
+            for (int q = 0; q < data_qubits_; ++q) data[static_cast<std::size_t>(q)] = q;
+            ws_.push_back(ctx_->weight_at_most(static_cast<int>(ws_.size()), data) * code_->S());
+        }
+        return ws_[static_cast<std::size_t>(s)];
+    }
+
+    // Level (r, 0) holds every data error of weight at most r (only the data
+    // qubits exist yet); fault levels start empty.
     State fresh_state() const {
         State state;
-        state.reserve(static_cast<std::size_t>(tau_) + 1);
-        state.push_back(ctx_->identity());
-        for (int t = 1; t <= tau_; ++t) state.push_back(ctx_->empty());
+        state.reserve(levels_.size());
+        for (const auto& [r, s] : levels_) {
+            if (s != 0) state.push_back(ctx_->empty());
+            else state.push_back(r == 0 ? ctx_->identity() : ctx_->weight_at_most(r));
+        }
         return state;
     }
 
@@ -470,8 +555,41 @@ private:
         return out;
     }
 
+    // Run one circuit from `start`. One branch per distinct classical outcome
+    // so far; branches whose bits agree are the same observation and are
+    // unioned, which is the same merge the driver does between nodes, applied
+    // within a circuit. `succ[i]` is the level a fault moves level i to.
+    std::vector<Branch> simulate(State start, const QasmProgram& program, const Layout& layout,
+                                 const std::vector<int>& succ) const {
+        std::vector<Branch> branches;
+        branches.push_back(Branch{std::move(start), {}});
+        for (const auto& reg : program.bits) {
+            branches.front().bits.emplace(reg.name, std::vector<bool>(reg.width, false));
+        }
+        for (const auto& instruction : program.instructions) {
+            switch (instruction.kind) {
+                case QasmInstruction::Kind::Barrier:
+                    break;
+                case QasmInstruction::Kind::Gate:
+                    for (auto& branch : branches) apply_gate(branch.by_t, instruction, layout, succ);
+                    break;
+                case QasmInstruction::Kind::Reset: {
+                    const std::vector<int> target{qubit_of(instruction.qubits[0], layout)};
+                    for (auto& branch : branches) {
+                        for (auto& level : branch.by_t) level.reset(target);
+                    }
+                    break;
+                }
+                case QasmInstruction::Kind::Measure:
+                    branches = split_on_measurement(branches, instruction, layout);
+                    break;
+            }
+        }
+        return branches;
+    }
+
     void apply_gate(State& by_t, const QasmInstruction& instruction,
-                    const Layout& layout) const {
+                    const Layout& layout, const std::vector<int>& succ) const {
         const std::string& gate = instruction.gate;
         if (gate == "i" || gate == "id") return;
 
@@ -506,14 +624,12 @@ private:
         // so one gate adds at most one fault to any lineage; feeding the merged
         // result back would let a single location fault twice.
         const std::vector<int> location{control, target};
-        State                  spawn;
-        spawn.reserve(static_cast<std::size_t>(tau_));
-        for (int t = 0; t < tau_; ++t) {
-            spawn.push_back(by_t[static_cast<std::size_t>(t)].fault_inject(location));
+        std::vector<std::pair<int, pset>> spawn;
+        for (std::size_t i = 0; i < by_t.size(); ++i) {
+            if (succ[i] >= 0 && !by_t[i].is_empty()) spawn.emplace_back(succ[i], by_t[i].fault_inject(location));
         }
-        for (int t = 0; t < tau_; ++t) {
-            by_t[static_cast<std::size_t>(t) + 1] =
-                by_t[static_cast<std::size_t>(t) + 1] | spawn[static_cast<std::size_t>(t)];
+        for (auto& [to, set] : spawn) {
+            by_t[static_cast<std::size_t>(to)] = by_t[static_cast<std::size_t>(to)] | set;
         }
     }
 
@@ -637,18 +753,28 @@ private:
         return found;
     }
 
+    // The residual errors of every execution with at most k faults in all,
+    // input weight included: E_m of Def. 3.8 for fault bound k.
+    std::vector<pset> unions_by_budget(const State& state) const {
+        std::vector<pset> u(static_cast<std::size_t>(tau_) + 1, ctx_->empty());
+        for (std::size_t i = 0; i < state.size(); ++i) {
+            const int k = levels_[i].first + levels_[i].second;
+            for (int j = k; j <= tau_; ++j) u[static_cast<std::size_t>(j)] = u[static_cast<std::size_t>(j)] | state[i];
+        }
+        return u;
+    }
+
     std::optional<Failure> check_uncached(StateId id) {
-        const auto& state = states_[id];
-        for (std::size_t t = 0; t < state.size(); ++t) {
-            if (state[t].is_empty()) continue;
-            const auto pair = run_fqcv(state[t]);
+        const auto unions = unions_by_budget(states_[id]);
+        // The full budget first; only on a violation look for the smallest one.
+        if (unions.back().is_empty() || !run_fqcv(unions.back())) return std::nullopt;
+        for (std::size_t t = 0; t < unions.size(); ++t) {
+            if (unions[t].is_empty()) continue;
+            const auto pair = run_fqcv(unions[t]);
             if (!pair) continue;
 
             // The witnesses run over the whole space; their ancilla half is
             // identity by construction, so only the data prefix says anything.
-            const auto on_data = [this](const std::string& p) {
-                return p.substr(0, static_cast<std::size_t>(data_qubits_));
-            };
             std::ostringstream detail;
             detail << on_data(pair->first) << " and " << on_data(pair->second)
                    << " share syndrome " << bits_to_string(code_->syndrome_of(pair->first))
@@ -735,6 +861,11 @@ private:
     bool        tracking_       = false;
     std::size_t peak_rss_bytes_ = 0;
 
+    std::vector<std::pair<int, int>>               levels_;   // (r, s) per level
+    std::vector<int>                               succ_;     // level after one more fault, or -1
+    std::vector<pset>                              ws_;       // ws_[s] = (weight <= s on data) * S
+    std::map<StateId, TerminalFacts>               facts_cache_;
+    std::map<std::pair<std::string, int>, std::optional<std::string>> flag_cache_;
     std::vector<std::string>                       generators_;
     std::optional<spbdd::context>                  ctx_;
     std::unique_ptr<spbdd::code>                   code_;

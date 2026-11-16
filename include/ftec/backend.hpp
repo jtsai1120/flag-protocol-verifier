@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -70,6 +71,31 @@ public:
 
     // Does this state contain two errors whose product is a logical operator?
     [[nodiscard]] virtual std::optional<Failure> check(StateId) = 0;
+
+    // What protocol validity (Def. 3.9 of the verification paper) asks of the
+    // residual errors at a terminal:
+    //   same_syndrome   Condition 1: every error has the same ideal syndrome;
+    //   weight_bounded  Condition 3: every error from an input of weight r and
+    //                   s faults has minimum weight at most s.
+    // `syndrome_detail` and `weight_detail` name witnesses when the
+    // condition fails.
+    struct TerminalFacts {
+        bool        same_syndrome  = false;
+        bool        weight_bounded = false;
+        std::string syndrome_detail;
+        std::string weight_detail;
+    };
+    [[nodiscard]] virtual TerminalFacts terminal_facts(StateId) {
+        throw std::runtime_error("this backend cannot check protocol validity");
+    }
+
+    // Part (1) of the k-flag condition (Def. 3.7) for one circuit: with no
+    // input error and 1 <= s <= k faults in it, every execution that raises no
+    // flag leaves a data error of minimum weight at most s. nullopt if it
+    // holds; otherwise a description of a counterexample.
+    [[nodiscard]] virtual std::optional<std::string> flag_condition(const CircuitRef&, int /*k*/) {
+        throw std::runtime_error("this backend cannot check the flag condition");
+    }
 
     // For diagnostics only.
     [[nodiscard]] virtual std::string describe(StateId) const { return {}; }

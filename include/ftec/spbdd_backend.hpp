@@ -21,6 +21,12 @@ struct SpbddOptions {
     //
     // The default is the one the library itself defaults to.
     std::string fqcv = "image";
+
+    // Input data errors (Def. 3.8 of the verification paper): the residual
+    // error sets also cover executions that start from a data error of weight
+    // r, with r + s <= t for s circuit faults. Off: the input is error free
+    // (r = 0), which is what the verifier did before.
+    bool input_errors = true;
 };
 
 [[nodiscard]] std::vector<std::string> spbdd_fqcv_methods();

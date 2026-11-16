@@ -43,8 +43,10 @@
     const failures = /failures=(\d+)/.exec(p.expected);
     const minT = /min_t=(-?\d+)/.exec(p.expected);
     if (!failures) return null;
-    return failures[1] === '0' ? { good: true, text: 'fault tolerant' }
-                               : { good: false, text: `fails at t = ${minT ? minT[1] : '?'}` };
+    const invalid = /invalid=(\d+)/.exec(p.expected);
+    if (failures[1] !== '0') return { good: false, text: `not correctable at t = ${minT ? minT[1] : '?'}` };
+    if (invalid && invalid[1] !== '0') return { good: false, text: 'control flow not valid' };
+    return { good: true, text: 'fault tolerant' };
   }
   function codeOf(files, entry) {
     const m = /\[\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\]/.exec(files[entry] || '');
@@ -275,8 +277,8 @@
       updateRunButton();
     } else if (data.type === 'out') {
       let cls = data.err ? 'err' : '';
-      if (/^\d+ unprotected path/.test(data.text)) cls = 'bad';
-      else if (/^no unprotected path found/.test(data.text)) cls = 'good';
+      if (/^\d+ (unprotected path|invalid terminal record)/.test(data.text) || /^FTEC\s*: rejected/.test(data.text)) cls = 'bad';
+      else if (/^(no unprotected path found|control flow is valid)/.test(data.text) || /^FTEC\s*: accepted/.test(data.text)) cls = 'good';
       line(data.text, cls);
     } else if (data.type === 'done') {
       line(`\n[exit ${data.rc}, ${(data.ms / 1000).toFixed(2)} s in the browser]`, 'sys');

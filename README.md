@@ -5,10 +5,22 @@ fault tolerant.
 
 Given a protocol written in FPDL and the OpenQASM circuits it uses, the
 verifier enumerates every execution path, injects every fault at every fault
-location, and asks whether some path leaves two errors that the measurement
-record cannot tell apart but whose product lies in `N(S)\S`. If such a pair
-exists, correcting one of the errors damages the encoded state under the other,
-and the protocol is not fault tolerant.
+location, and checks the three things that together make a protocol fault
+tolerant, following *Formal Verification of Flagged Fault-Tolerant Error
+Correction Protocols* (FTEC ⇔ protocol valid ∧ correctable):
+
+1. **Circuit validity.** Every syndrome-extraction circuit is correct (it
+   measures the generators it declares, and lets data errors through
+   unchanged) and deterministic (no outcome is random, and the encoded state
+   is left alone).
+2. **Protocol (control-flow) validity.** At every terminal, what can have
+   happened along the measurement record is something the decoder can act on.
+3. **Correctability.** No record leaves two errors with the same syndrome
+   whose product lies in `N(S)\S`; correcting one of them would damage the
+   encoded state under the other. Executions may start from a data error of
+   weight r as well as suffer s faults, with r + s ≤ t.
+
+See [What is checked](#what-is-checked) for the details.
 
 All Pauli-set representation and arithmetic is done by
 [SPBDD](https://github.com/fmlab-iis/spbdd), a library that represents sets of
@@ -74,13 +86,18 @@ What `make` does:
 | `--max-paths=N` | `5000` | Give up past this many symbolic paths |
 | `--first` | off | Stop at the first unprotected path |
 | `--dag` | off | Print the merged path structure and exit without verifying |
-| `--skip-se-check` | off | Verify the circuits as written even when they do not measure the declared generators |
+| `--no-input-errors` | off | Start every execution from an error-free input (r = 0) |
+| `--no-validity` | off | Skip the protocol validity check |
+| `--skip-circuit-check` | off | Verify the circuits as written even when they are not valid |
 
 The output lists:
 
 - the number of paths, records and circuits reached;
-- the verdict: `no unprotected path found`, or each unprotected path with its
-  fault count and measurement record;
+- correctability: `no unprotected path found`, or each unprotected path with
+  its fault count and measurement record;
+- protocol validity: how many terminal records each control-flow condition
+  settled, and each invalid path with a counterexample;
+- the overall verdict, `FTEC : accepted` or `rejected`;
 - backend statistics: cache hit rates, and the time and BDD sizes of the final
   query;
 - expansion time, traversal time and peak memory.
@@ -143,36 +160,78 @@ Reference measurements (2 vCPU, 7.8 GiB, two runs in parallel):
 The bottleneck is state propagation and fault injection before the final
 query. The query itself is about 0.5% of the total.
 
-### The SE circuit check
+## What is checked
 
-Before verifying, `ftec-verify` checks every extraction circuit against its SE
-declaration (`src/ftec/se_check.cpp`):
+### 1. Circuit validity
 
-- Each measurement into the syndrome register is propagated backwards through
-  the ideal circuit to its start (Heisenberg picture, phases ignored). Ancillas
-  start in |0>, and so does any qubit after a reset.
-- What the measurement observes on the data must be the generator `g:` lists at
-  that bit's index.
-- The outcome must not be random, and must not depend on an earlier
-  measurement of a reused qubit.
-- Each flag measurement must observe only a stabilizer.
+Before anything else, `ftec-verify` checks every extraction circuit once
+(`src/ftec/circuit_check.cpp`, no BDDs). It propagates signed Pauli operators
+backwards through the ideal circuit to its start (the Heisenberg picture of a
+stabilizer simulation). Ancillas start in |0>, and so does any qubit after a
+reset; the data start in the code space.
 
-Without this check, a circuit wired to the wrong qubit, using the wrong Pauli,
-measuring in the wrong basis or reading bits out of order would be verified as
-written, and could still pass. The check rejects such circuits and names the
-line and what it measures instead; `--skip-se-check` verifies them anyway.
+- **Correct.** Syndrome bit i observes the generator that `g:` lists at index
+  i, so an input error flips it exactly when it anticommutes with that
+  generator. An input data error E leaves the circuit as E' with E'E in the
+  stabilizer group (checked on the 2n errors X_j and Z_j).
+- **Deterministic.** Every measurement, of any ancilla, observes a stabilizer:
+  its error-free outcome is fixed whatever the encoded state, and does not
+  depend on an earlier measurement of a reused qubit. Every logical operator
+  comes out as itself times a stabilizer and never touches a qubit while that
+  qubit is measured or reset.
 
-Four bundled protocols fail the check, and their verdicts should not be relied
-on until their circuits are fixed:
+Outcomes are recorded as flips relative to the error-free outcome, so a
+measurement that deterministically reads 1, or a logical operator that comes
+out with a minus sign, is reported as a warning only. Circuits that fail are
+reported with the line and what they measure instead, and the protocol is
+rejected without being verified; `--skip-circuit-check` verifies them anyway.
 
-- LL25 [[5,1,3]] [2,2] and [2,2]^T: some syndrome bits are random, and one
-  measures the fifth cyclic generator instead of the declared one.
-- Du24 [[17,1,5]] (parallel and plain): some flag qubits are coupled an odd
-  number of times, which makes syndrome and flag bits random, and two pairs of
-  syndrome bits are read out in swapped positions.
+The two LL25 [[5,1,3]] [2,2] protocols fail: their parallel schedules make
+some syndrome bits random, and one of them measures the fifth cyclic generator
+instead of the declared one. An independent simulation with
+[stim](https://github.com/quantumlib/Stim) agrees with the checker on 240
+mutated circuits (757 measurements, no disagreement).
 
-An independent simulation with [stim](https://github.com/quantumlib/Stim)
-agrees on which bits are random.
+### 2. Correctability with input errors
+
+The backend keeps one error set per level (r, s): executions that started from
+a data error of weight r and suffered s faults, with r + s ≤ t. At each
+terminal the union of all levels is E_m, and no two errors in it may share a
+syndrome while differing by a logical operator. `--no-input-errors` keeps only
+r = 0.
+
+### 3. Protocol validity
+
+At every terminal record, one of the control-flow conditions has to hold:
+
+| Condition | Checked |
+|---|---|
+| 1 | Every error in E_m has the same ideal syndrome (no generator splits E_m) |
+| 2 | The record ends in t − w + 1 identical, unflagged, full rounds, where w counts the faults the record exposes (flags, and changes of syndrome between consecutive unflagged rounds), and those circuits satisfy the (t − w)-flag condition |
+| 3 | Every error from s faults is within weight s of the code space |
+
+A terminal that ends without decoding (`end()`) needs Condition 3. The
+k-flag condition of a circuit is checked by running the circuit alone with up
+to k faults: whenever no flag is raised, s faults must leave an error within
+weight s of the code space, and a fault-free run must never raise a flag.
+Every invalid path is reported with a counterexample, for example two residual
+errors that the record cannot tell apart.
+
+### Results on the bundled protocols
+
+Distance 3 (`tests/expected.txt`); input errors included:
+
+| Protocol | Correctable | Control flow | FTEC |
+|---|---|---|---|
+| CR17 [[5,1,3]] | yes | valid | accepted |
+| LL25 [[5,1,3]] [1,1,1,1]^T | yes | valid | accepted |
+| Bha23 [[7,1,3]] fig5 | yes | valid | accepted |
+| Bha23 [[7,1,3]] fig6 | yes | valid | accepted |
+| Bha23 [[5,1,3]] | yes | 4 invalid paths | rejected |
+
+In Bha23 [[5,1,3]], after a flag the adaptive measurements cannot tell a false
+alarm (`IIIII`) from the hook error `IIZXI`: both read 0 on `XZZXI`, `YXXYI` and
+`XIXZZ`, but they differ on `IXZZX`.
 
 ## Tests
 
@@ -180,12 +239,14 @@ agrees on which bits are random.
 
 - `parser_tests` parses every FPDL file under `protocols/`.
 - `qasm_tests` parses every QASM circuit.
-- `se_check_tests` runs the SE check on every protocol (the four above must
-  fail it, the rest must pass) and on ten deliberately broken circuits.
+- `circuit_check_tests` runs the circuit check on every protocol (the two
+  LL25 [2,2] protocols must fail it, the rest must pass) and on fourteen
+  deliberately broken circuits.
 - `fqcv_tests` verifies every distance-3 protocol once with each of the four
   methods. The four results must agree with each other and with the verdicts
-  recorded in `tests/expected.txt`. Those verdicts were cross-checked against
-  an independent, hand-written BuDDy backend when the file was made.
+  recorded in `tests/expected.txt`, correctability and protocol validity both.
+  The correctability verdicts were cross-checked against an independent,
+  hand-written BuDDy backend for error-free inputs.
 
 ## Website
 
