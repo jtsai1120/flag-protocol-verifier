@@ -3,8 +3,6 @@
 # (emcc/em++/emar on PATH).
 #
 #   site/playground/ftec.{js,wasm}   the verifier, ftec_main() instead of main()
-#   site/spbdd/spbdd.{js,wasm}       SPBDD with JavaScript bindings, under the
-#                                    playground's C++ interpreter (site/spbdd/cpp.js)
 #   site/playground/protocols.json   every protocol in protocols/, for the picker
 
 EMCXX ?= em++
@@ -21,8 +19,10 @@ COMMON_LD := -fexceptions -sMODULARIZE=1 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMOR
 FTEC_SRC := src/ftec_verify_main.cpp src/fpdl/parser.cpp src/ftec/qasm.cpp src/ftec/dag.cpp \
             src/ftec/verify.cpp src/ftec/spbdd_backend.cpp src/ftec/se_check.cpp
 
-.PHONY: all FORCE
-all: site/playground/ftec.js site/spbdd/spbdd.js site/playground/protocols.json
+.PHONY: all spbdd-playground FORCE
+all: site/playground/ftec.js site/playground/protocols.json
+
+spbdd-playground: web/spbdd-playground/spbdd.js
 
 # SPBDD's own Makefile again, with Emscripten and a build directory of its own
 # so the native build is left alone.
@@ -37,7 +37,9 @@ site/playground/ftec.js: $(FTEC_SRC) $(wildcard include/*/*.hpp) web/wasm_main.h
 	    -sEXPORT_NAME=createFtec -sEXPORTED_FUNCTIONS=_ftec_main,_malloc,_free \
 	    -sEXPORTED_RUNTIME_METHODS='["FS","stringToUTF8","lengthBytesUTF8"]' -o $@
 
-site/spbdd/spbdd.js: web/spbdd_bind.cpp $(WASM_LIB)
+# The SPBDD playground is parked in web/spbdd-playground/ and not published;
+# `make spbdd-playground` still builds it.
+web/spbdd-playground/spbdd.js: web/spbdd_bind.cpp $(WASM_LIB)
 	@mkdir -p $(@D)
 	$(EMCXX) -std=c++17 $(OPT) -I$(SPBDD_SRC)/include $< $(WASM_LIB) --bind $(COMMON_LD) \
 	    -sEXPORT_NAME=createSpbdd -o $@

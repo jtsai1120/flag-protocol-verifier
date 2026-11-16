@@ -14,7 +14,7 @@ All Pauli-set representation and arithmetic is done by
 [SPBDD](https://github.com/fmlab-iis/spbdd), a library that represents sets of
 multi-qubit Pauli operators as BuDDy BDDs.
 
-**Website and browser playgrounds:** <https://jtsai1120.github.io/flag-protocol-verifier/>
+**Website and browser playground:** <https://jtsai1120.github.io/flag-protocol-verifier/>
 
 ```
 .fpdl ──► fpdl::Parser ──┬─► code: [[n,k,d]] + generators ──► tau = ⌊(d−1)/2⌋
@@ -54,7 +54,7 @@ What `make` does:
 |---|---|
 | `make SPBDD_REF=<branch/tag/commit>` | Use another SPBDD version (run `make distclean` first) |
 | `make SPBDD_SRC=/path/to/spbdd` | Use an SPBDD checkout you already have, without fetching |
-| `make site` | Build the website's WebAssembly playgrounds (needs Emscripten) |
+| `make site` | Build the website's WebAssembly playground (needs Emscripten) |
 | `make clean` | Remove `build/` |
 | `make distclean` | Also remove `third_party/` |
 
@@ -123,7 +123,7 @@ the `FSE_f` / `FSE_b` circuits for a rotated surface code.
   are unflagged.
 - The lattice can be square (d×d) or rectangular (d×C: distance d, d·C qubits).
 - The generated d=5 protocol is identical to the hand-written
-  `CB_18[[25,1,5]]_plain`.
+  `CB18_[[25,1,5]]_plain`.
 
 ```bash
 tools/gen_cb18_surface.py 5 --out protocols            # [[25,1,5]]
@@ -189,20 +189,19 @@ agrees on which bits are random.
 
 ## Website
 
-`site/` is the static website: a landing page and two playgrounds that run
-in the browser as WebAssembly.
+`site/` is the static website: a landing page and a playground that runs the
+verifier in the browser as WebAssembly, on the bundled protocols or on your
+own `.fpdl` and `.qasm` files.
 
-- The verifier playground runs the bundled protocols or your own `.fpdl` and
-  `.qasm` files.
-- The SPBDD playground runs C++ programs against SPBDD. A subset of C++17 is
-  interpreted (`site/spbdd/cpp.js`) on top of SPBDD's WebAssembly build; the
-  examples in `site/spbdd/examples/` are complete programs that also compile
-  with g++, and `make check-site` checks that both print the same.
-
-`make site` compiles both with Emscripten and bundles the protocols into
+`make site` compiles the verifier with Emscripten and bundles the protocols into
 `site/playground/protocols.json`. The build outputs are not committed to
 `main`; the published copy lives on the `gh-pages` branch. To preview locally,
 serve the directory: `python3 -m http.server -d site`.
+
+A second playground, for SPBDD itself, is parked in `web/spbdd-playground/` and
+not published for now. It interprets a subset of C++17 (`cpp.js`) on top of
+SPBDD's WebAssembly build; `make check-spbdd-playground` builds it and checks
+that each of its examples prints the same as when compiled with g++.
 
 ## Layout
 
@@ -217,7 +216,7 @@ tools/bench_fqcv.py          batch measurements
 tools/gen_cb18_surface.py    CB18 protocol generator
 protocols/                   test protocols, one directory each (.fpdl + the .qasm it uses)
 docs/FPDL.md                 the FPDL language
-web/                         WebAssembly builds for the website (Makefile, SPBDD bindings)
+web/                         WebAssembly builds for the website; the parked SPBDD playground
 site/                        the website
 ```
 

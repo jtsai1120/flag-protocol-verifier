@@ -6,7 +6,7 @@ Quantum 2, 53 (2018), Sec. 3.
 
 * Code: rotated surface code, data qubits row-major on the d x d lattice;
   generator order and qubit order inside each generator match the existing
-  protocols/CB_18[[25,1,5]]_plain (Z checks, then X checks, both row-major by
+  protocols/CB18_[[25,1,5]]_plain (Z checks, then X checks, both row-major by
   plaquette).
 * FSE_f: serial extraction, one reusable syndrome ancilla and one reusable flag
   ancilla; every weight-4 check uses the Fig. 2(b) single-flag circuit (a
@@ -202,7 +202,7 @@ def main():
     zs, xs = plaquettes(R, C)
     checks = [("Z", q) for q in zs] + [("X", q) for q in xs]
     assert len(checks) == n - 1, (len(checks), n)
-    name = f"CB18_[[{n},1,{d}]]_gen" + ("" if R == C else f"_{R}x{C}")
+    name = f"CB18_[[{n},1,{d}]]_plain"
     out = Path(a.out) / name
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{name}.fpdl").write_text(fpdl(n, d, name, checks))

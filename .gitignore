@@ -10,5 +10,5 @@ __pycache__/
 /site/playground/ftec.js
 /site/playground/ftec.wasm
 /site/playground/protocols.json
-/site/spbdd/spbdd.js
-/site/spbdd/spbdd.wasm
+/web/spbdd-playground/spbdd.js
+/web/spbdd-playground/spbdd.wasm

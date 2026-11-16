@@ -16,11 +16,10 @@ from pathlib import Path
 # the protocols as shipped. None: did not finish within 2000 s.
 NATIVE_SECONDS = {
     "CB18_[[17,1,5]]_plain": 169,
-    "CB_18[[25,1,5]]_plain": 212,
-    "CB18_[[25,1,5]]_gen": 212,
-    "CB18_[[35,1,5]]_gen_5x7": 750,
-    "CB18_[[45,1,5]]_gen_5x9": 2240,
-    "CB18_[[49,1,7]]_gen": None,
+    "CB18_[[25,1,5]]_plain": 212,
+    "CB18_[[35,1,5]]_plain": 750,
+    "CB18_[[45,1,5]]_plain": 2240,
+    "CB18_[[49,1,7]]_plain": None,
     "Du24_[[17,1,5]]_plain": 340,
     "Du24_[[17,1,5]]": 238,
     "Du24[[19,1,5]]": 507,
@@ -37,8 +36,8 @@ KNOWN_VERDICTS = {
     "Du24_[[17,1,5]]_plain": "min_t=2 failures=2314",
     "Du24_[[17,1,5]]": "min_t=2 failures=2314",
     **{name: "min_t=-1 failures=0" for name in (
-        "CB18_[[17,1,5]]_plain", "CB_18[[25,1,5]]_plain", "CB18_[[25,1,5]]_gen",
-        "CB18_[[35,1,5]]_gen_5x7", "CB18_[[45,1,5]]_gen_5x9", "Du24[[19,1,5]]",
+        "CB18_[[17,1,5]]_plain", "CB18_[[25,1,5]]_plain",
+        "CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain", "Du24[[19,1,5]]",
         "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T", "LL25_[[17,1,5]]_[2,2,2,1,1]^T",
         "LL25_[[19,1,5]]_[1,1,1,...]^T", "LL25_[[19,1,5]]_[2,2,2,1,1,1]^T")},
 }

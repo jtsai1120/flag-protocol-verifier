@@ -1,5 +1,5 @@
 // JavaScript bindings for SPBDD, used by the SPBDD playground's C++
-// interpreter (site/spbdd/cpp.js), which maps C++ calls onto them.
+// interpreter (web/spbdd-playground/cpp.js), which maps C++ calls onto them.
 //
 // The API mirrors the C++ one name for name, with the operators spelled as
 // methods:

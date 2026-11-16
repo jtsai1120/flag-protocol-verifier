@@ -2,8 +2,9 @@
 #
 #   make            fetch and build SPBDD, then build ftec-verify
 #   make check      also build and run the tests
-#   make site       build the website's WebAssembly playgrounds (needs Emscripten)
-#   make check-site check the SPBDD playground's examples against g++ (needs Node)
+#   make site       build the website's WebAssembly playground (needs Emscripten)
+#   make check-spbdd-playground  check the (unpublished) SPBDD playground's
+#                   examples against g++ (needs Emscripten and Node)
 #   make clean      remove build/ (keeps the fetched SPBDD)
 #   make distclean  also remove third_party/
 #
@@ -44,7 +45,7 @@ TESTS    := $(BUILD)/parser_tests $(BUILD)/qasm_tests $(BUILD)/se_check_tests $(
 CPPFLAGS := -Iinclude -I$(SPBDD_DIR)/include -MMD -MP
 LDLIBS   := $(SPBDD_LIB) -lm
 
-.PHONY: all spbdd check site check-site clean distclean
+.PHONY: all spbdd check site check-spbdd-playground clean distclean
 .DELETE_ON_ERROR:
 .SECONDARY:
 
@@ -117,12 +118,14 @@ check: $(BIN) $(TESTS)
 site: $(SPBDD_STAMP)
 	$(MAKE) -f web/Makefile SPBDD_SRC=$(SPBDD_SRC)
 
-# Every SPBDD playground example, built natively with g++ and run by the
+# The SPBDD playground (web/spbdd-playground/, not published for now): every
+# example, built natively with g++ and run by the
 # playground's interpreter under Node, must print the same thing.
-SPBDD_EXAMPLES = $(sort $(wildcard site/spbdd/examples/*.cpp))
+SPBDD_EXAMPLES = $(sort $(wildcard web/spbdd-playground/examples/*.cpp))
 NODE ?= node --no-experimental-fetch
 
-check-site: site
+check-spbdd-playground: $(SPBDD_STAMP)
+	$(MAKE) -f web/Makefile SPBDD_SRC=$(SPBDD_SRC) spbdd-playground
 	@mkdir -p $(BUILD)/examples
 	@for f in $(SPBDD_EXAMPLES); do \
 	    b=$(BUILD)/examples/$$(basename $$f .cpp); \

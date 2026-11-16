@@ -1,7 +1,7 @@
-protocol CB18_[[35,1,5]]_gen_5x7:
+protocol CB18_[[49,1,7]]_plain:
 
     code:
-        [[35,1,5]]
+        [[49,1,7]]
 
         [[Z1, Z8],
          [Z2, Z3, Z9, Z10],
@@ -19,6 +19,14 @@ protocol CB18_[[35,1,5]]_gen_5x7:
          [Z24, Z25, Z31, Z32],
          [Z26, Z27, Z33, Z34],
          [Z28, Z35],
+         [Z29, Z36],
+         [Z30, Z31, Z37, Z38],
+         [Z32, Z33, Z39, Z40],
+         [Z34, Z35, Z41, Z42],
+         [Z36, Z37, Z43, Z44],
+         [Z38, Z39, Z45, Z46],
+         [Z40, Z41, Z47, Z48],
+         [Z42, Z49],
          [X2, X3],
          [X4, X5],
          [X6, X7],
@@ -34,9 +42,15 @@ protocol CB18_[[35,1,5]]_gen_5x7:
          [X23, X24, X30, X31],
          [X25, X26, X32, X33],
          [X27, X28, X34, X35],
-         [X29, X30],
-         [X31, X32],
-         [X33, X34]]
+         [X29, X30, X36, X37],
+         [X31, X32, X38, X39],
+         [X33, X34, X40, X41],
+         [X37, X38, X44, X45],
+         [X39, X40, X46, X47],
+         [X41, X42, X48, X49],
+         [X43, X44],
+         [X45, X46],
+         [X47, X48]]
 
     se:
         FSE_b {
@@ -59,6 +73,14 @@ protocol CB18_[[35,1,5]]_gen_5x7:
                 [Z24, Z25, Z31, Z32],
                 [Z26, Z27, Z33, Z34],
                 [Z28, Z35],
+                [Z29, Z36],
+                [Z30, Z31, Z37, Z38],
+                [Z32, Z33, Z39, Z40],
+                [Z34, Z35, Z41, Z42],
+                [Z36, Z37, Z43, Z44],
+                [Z38, Z39, Z45, Z46],
+                [Z40, Z41, Z47, Z48],
+                [Z42, Z49],
                 [X2, X3],
                 [X4, X5],
                 [X6, X7],
@@ -74,9 +96,15 @@ protocol CB18_[[35,1,5]]_gen_5x7:
                 [X23, X24, X30, X31],
                 [X25, X26, X32, X33],
                 [X27, X28, X34, X35],
-                [X29, X30],
-                [X31, X32],
-                [X33, X34]]
+                [X29, X30, X36, X37],
+                [X31, X32, X38, X39],
+                [X33, X34, X40, X41],
+                [X37, X38, X44, X45],
+                [X39, X40, X46, X47],
+                [X41, X42, X48, X49],
+                [X43, X44],
+                [X45, X46],
+                [X47, X48]]
         }
 
         FSE_f {
@@ -100,6 +128,14 @@ protocol CB18_[[35,1,5]]_gen_5x7:
                 [Z24, Z25, Z31, Z32],
                 [Z26, Z27, Z33, Z34],
                 [Z28, Z35],
+                [Z29, Z36],
+                [Z30, Z31, Z37, Z38],
+                [Z32, Z33, Z39, Z40],
+                [Z34, Z35, Z41, Z42],
+                [Z36, Z37, Z43, Z44],
+                [Z38, Z39, Z45, Z46],
+                [Z40, Z41, Z47, Z48],
+                [Z42, Z49],
                 [X2, X3],
                 [X4, X5],
                 [X6, X7],
@@ -115,10 +151,16 @@ protocol CB18_[[35,1,5]]_gen_5x7:
                 [X23, X24, X30, X31],
                 [X25, X26, X32, X33],
                 [X27, X28, X34, X35],
-                [X29, X30],
-                [X31, X32],
-                [X33, X34]]
-            #-flag: 2
+                [X29, X30, X36, X37],
+                [X31, X32, X38, X39],
+                [X33, X34, X40, X41],
+                [X37, X38, X44, X45],
+                [X39, X40, X46, X47],
+                [X41, X42, X48, X49],
+                [X43, X44],
+                [X45, X46],
+                [X47, X48]]
+            #-flag: 3
         }
 
     gvar:
@@ -127,21 +169,24 @@ protocol CB18_[[35,1,5]]_gen_5x7:
         cnt n_diff = 0;
         cnt n_flag = 0;
 
-        bit[34] s_prev = ⊥;
+        bit[48] s_prev = ⊥;
         bit diff_prev = 0;
         mr m = mr[];
 
     tc:
-        1: ((n_c_same == 3 - n_diff - 1 and n_c_same != 0) and n_flag == 0)
-        2: (n_diff == 2 and n_flag == 0)
-        3: (n_flag == 2)
-        4: (n_diff == 1 and n_flag == 1)
-        5: (n_same == 1 and n_diff == 0 and n_flag == 1)
+        1: ((n_c_same == 4 - n_diff - 1 and n_c_same != 0) and n_flag == 0)
+        2: (n_diff == 3 and n_flag == 0)
+        3: (n_flag == 3)
+        4: (n_diff == 2 and n_flag == 1)
+        5: (n_diff == 1 and n_flag == 2)
+        6: (n_same == 2 and n_diff == 0 and n_flag == 1)
+        7: (n_same == 1 and n_diff == 1 and n_flag == 1)
+        8: (n_same == 1 and n_diff == 0 and n_flag == 2)
 
     af:
         while(!tc) {
-            bit[34] s = ⊥;
-            bit[24] f = ⊥;
+            bit[48] s = ⊥;
+            bit[36] f = ⊥;
             (s, f) = FSE_f();
 
             if (f != 0) {
@@ -172,23 +217,37 @@ protocol CB18_[[35,1,5]]_gen_5x7:
     tp:
         1: { decode(mr[s_prev]); }
         2: {
-            bit[34] s = ⊥;
+            bit[48] s = ⊥;
             (s,) = FSE_b();
             decode(mr[s]);
         }
         3: {
-            bit[34] s = ⊥;
+            bit[48] s = ⊥;
             (s,) = FSE_b();
             m.push(s);
             decode(m);
         }
         4: {
-            bit[34] s = ⊥;
+            bit[48] s = ⊥;
             (s,) = FSE_b();
             m.push(s);
             decode(m);
         }
         5: {
+            bit[48] s = ⊥;
+            (s,) = FSE_b();
+            m.push(s);
+            decode(m);
+        }
+        6: {
+            m.push(s_prev);
+            decode(m);
+        }
+        7: {
+            m.push(s_prev);
+            decode(m);
+        }
+        8: {
             m.push(s_prev);
             decode(m);
         }
