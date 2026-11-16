@@ -37,10 +37,10 @@ BUILD := build
 BIN   := $(BUILD)/ftec-verify
 
 CORE_SRC := src/fpdl/parser.cpp src/ftec/qasm.cpp src/ftec/dag.cpp src/ftec/verify.cpp \
-            src/ftec/spbdd_backend.cpp src/ftec/se_check.cpp
+            src/ftec/spbdd_backend.cpp src/ftec/circuit_check.cpp
 CORE_OBJ := $(CORE_SRC:src/%.cpp=$(BUILD)/obj/%.o)
 MAIN_OBJ := $(BUILD)/obj/ftec_verify_main.o
-TESTS    := $(BUILD)/parser_tests $(BUILD)/qasm_tests $(BUILD)/se_check_tests $(BUILD)/fqcv_tests
+TESTS    := $(BUILD)/parser_tests $(BUILD)/qasm_tests $(BUILD)/circuit_check_tests $(BUILD)/fqcv_tests
 
 CPPFLAGS := -Iinclude -I$(SPBDD_DIR)/include -MMD -MP
 LDLIBS   := $(SPBDD_LIB) -lm
@@ -99,19 +99,18 @@ $(BUILD)/%_tests: $(BUILD)/obj/tests/%_tests.o $(CORE_OBJ)
 FPDL_ALL = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' | sort)
 QASM_ALL = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.qasm' | sort)
 # Every protocol except [[49,1,7]], whose symbolic expansion alone takes
-# minutes. Four protocols are known to have circuits that do not measure their
-# declared generators -- some syndrome bits come out random, or land in the
-# wrong position -- so the check must fail on them: LL25 [[5,1,3]] [2,2] and
-# [2,2]^T, and both Du24 [[17,1,5]] protocols.
-FPDL_SE_BAD = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' \
-                \( -path '*LL25_\[\[5,1,3\]\]_\[2,2\]*' -o -path '*Du24_\[\[17,1,5\]\]*' \) | sort)
-FPDL_SE  = $(filter-out $(FPDL_SE_BAD),$(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' ! -path '*49,1,7*' | sort))
+# minutes. LL25 [[5,1,3]] [2,2] and [2,2]^T are known to be invalid -- their
+# parallel schedules make syndrome bits random -- so the check must fail on
+# them.
+FPDL_CIRCUIT_BAD = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' \
+                -path '*LL25_\[\[5,1,3\]\]_\[2,2\]*' | sort)
+FPDL_CIRCUIT  = $(filter-out $(FPDL_CIRCUIT_BAD),$(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' ! -path '*49,1,7*' | sort))
 FPDL_D3  = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' -path '*,3]]*' | sort)
 
 check: $(BIN) $(TESTS)
 	$(BUILD)/parser_tests $(FPDL_ALL)
 	$(BUILD)/qasm_tests $(QASM_ALL)
-	$(BUILD)/se_check_tests $(FPDL_SE) $(addprefix --bad ,$(FPDL_SE_BAD))
+	$(BUILD)/circuit_check_tests $(FPDL_CIRCUIT) $(addprefix --bad ,$(FPDL_CIRCUIT_BAD))
 	$(BUILD)/fqcv_tests tests/expected.txt $(FPDL_D3)
 
 # The website's WebAssembly builds (needs Emscripten); see web/Makefile.

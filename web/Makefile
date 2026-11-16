@@ -17,7 +17,7 @@ COMMON_LD := -fexceptions -sMODULARIZE=1 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMOR
              -sENVIRONMENT=web,worker,node
 
 FTEC_SRC := src/ftec_verify_main.cpp src/fpdl/parser.cpp src/ftec/qasm.cpp src/ftec/dag.cpp \
-            src/ftec/verify.cpp src/ftec/spbdd_backend.cpp src/ftec/se_check.cpp
+            src/ftec/verify.cpp src/ftec/spbdd_backend.cpp src/ftec/circuit_check.cpp
 
 .PHONY: all spbdd-playground FORCE
 all: site/playground/ftec.js site/playground/protocols.json

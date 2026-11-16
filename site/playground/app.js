@@ -86,7 +86,7 @@
       meta.append(`[[${p.n},${p.k},${p.d}]]`);
       const v = verdictOf(p);
       if (v) { meta.append(', '); meta.append(el('span', { className: v.good ? 'good' : 'bad', textContent: v.text })); }
-      if (p.se_check_fails) { meta.append(', '); meta.append(el('span', { className: 'bad', textContent: 'circuits fail the SE check' })); }
+      if (p.se_check_fails) { meta.append(', '); meta.append(el('span', { className: 'bad', textContent: 'circuits not valid' })); }
       if (p.native_seconds === null) meta.append(', over 2000 s natively');
       else if (p.native_seconds >= 1) meta.append(`, ${human(p.native_seconds * WASM_SLOWDOWN)} here`);
       if (ws && ws.edited) meta.append(', edited');
@@ -154,7 +154,7 @@
     if (!p) { note.textContent = 'Files stay in this browser. The .fpdl file’s relative paths resolve against the files listed here.'; return; }
     if (p.se_check_fails) {
       note.className = 'notice warn';
-      note.textContent = 'These circuits do not measure the generators the protocol declares, so the verifier stops before verifying. Run it to see where; tick “Skip the SE check” to verify the circuits as written anyway.';
+      note.textContent = 'These circuits are not valid: their parallel schedule makes syndrome bits random, so the verifier stops before verifying. Run it to see where; tick “Skip the circuit check” to verify the circuits as written anyway.';
     } else if (p.native_seconds === null) {
       note.className = 'notice warn';
       note.textContent = 'This protocol did not finish within 2000 s natively. It will very likely run out of time or memory here.';
@@ -303,7 +303,7 @@
     const args = ['ftec-verify', '/w/' + ws.entry, '--fqcv=' + $('fqcv').value];
     if ($('first').checked) args.push('--first');
     if ($('dag').checked) args.push('--dag');
-    if ($('skip-se').checked) args.push('--skip-se-check');
+    if ($('skip-se').checked) args.push('--skip-circuit-check');
     if ($('bound').value) args.push('--bound=' + parseInt($('bound').value, 10));
     if ($('max-paths').value) args.push('--max-paths=' + parseInt($('max-paths').value, 10));
 

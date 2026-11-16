@@ -20,8 +20,8 @@ NATIVE_SECONDS = {
     "CB18_[[35,1,5]]_plain": 750,
     "CB18_[[45,1,5]]_plain": 2240,
     "CB18_[[49,1,7]]_plain": None,
-    "Du24_[[17,1,5]]_plain": 340,
-    "Du24_[[17,1,5]]": 238,
+    "Du24_[[17,1,5]]_plain": 203,
+    "Du24_[[17,1,5]]": 153,
     "Du24[[19,1,5]]": 507,
     "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T": 251,
     "LL25_[[17,1,5]]_[2,2,2,1,1]^T": 304,
@@ -33,8 +33,8 @@ NATIVE_SECONDS = {
 # Verdicts of the larger protocols, from the same native runs (tests/expected.txt
 # covers only distance 3).
 KNOWN_VERDICTS = {
-    "Du24_[[17,1,5]]_plain": "min_t=2 failures=2314",
-    "Du24_[[17,1,5]]": "min_t=2 failures=2314",
+    "Du24_[[17,1,5]]_plain": "min_t=2 failures=36",
+    "Du24_[[17,1,5]]": "min_t=2 failures=36",
     **{name: "min_t=-1 failures=0" for name in (
         "CB18_[[17,1,5]]_plain", "CB18_[[25,1,5]]_plain",
         "CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain", "Du24[[19,1,5]]",
@@ -43,9 +43,9 @@ KNOWN_VERDICTS = {
 }
 
 
-# Protocols whose circuits fail the SE check (ftec-verify stops before
-# verifying them): some syndrome bits are random, or land in the wrong position.
-SE_CHECK_FAILS = {"LL25_[[5,1,3]]_[2,2]", "LL25_[[5,1,3]]_[2,2]^T", "Du24_[[17,1,5]]", "Du24_[[17,1,5]]_plain"}
+# Protocols whose circuits are not valid (ftec-verify stops before verifying
+# them): their parallel schedules make syndrome bits random.
+SE_CHECK_FAILS = {"LL25_[[5,1,3]]_[2,2]", "LL25_[[5,1,3]]_[2,2]^T"}
 
 
 def main():

@@ -1,5 +1,5 @@
 #include "ftec/dag.hpp"
-#include "ftec/se_check.hpp"
+#include "ftec/circuit_check.hpp"
 #include "ftec/spbdd_backend.hpp"
 #include "ftec/verify.hpp"
 
@@ -68,7 +68,9 @@ void usage(const char* argv0) {
         << "  --max-paths=N    give up past this many symbolic paths (default 5000)\n"
         << "  --first          stop at the first unprotected path\n"
         << "  --dag            print the merged path structure and exit\n"
-        << "  --skip-se-check  do not check that each SE circuit measures its g:\n";
+        << "  --skip-circuit-check\n"
+        << "                   verify the circuits as written even if they are not\n"
+        << "                   valid (correct and deterministic)\n";
 }
 
 // Symbolic expansion needs a finite transition bound, and a protocol that has
@@ -139,7 +141,7 @@ int main(int argc, char** argv) {
     std::optional<std::size_t> bound;
     std::size_t                max_paths = 5000;
     bool                       dag_only  = false;
-    bool                       skip_se_check = false;
+    bool                       skip_circuit_check = false;
     ftec::VerifyOptions        options;
 
     for (int i = 1; i < argc; ++i) {
@@ -157,8 +159,8 @@ int main(int argc, char** argv) {
             max_paths = std::stoull(arg.substr(12));
         } else if (arg == "--first") {
             options.stop_at_first_failure = true;
-        } else if (arg == "--skip-se-check") {
-            skip_se_check = true;
+        } else if (arg == "--skip-circuit-check" || arg == "--skip-se-check") {
+            skip_circuit_check = true;
         } else if (arg == "--dag") {
             dag_only = true;
         } else if (arg.rfind("--", 0) == 0) {
@@ -211,14 +213,15 @@ int main(int argc, char** argv) {
 
         // The traversal verifies the circuits as written; this makes sure
         // they are the circuits the protocol says they are.
-        if (!skip_se_check) {
-            const auto issues = ftec::check_se_circuits(dag);
+        if (!skip_circuit_check) {
+            const auto report = ftec::check_circuits(dag);
+            for (const auto& warning : report.warnings) std::cerr << "warning: " << warning << "\n";
+            const auto& issues = report.errors;
             if (!issues.empty()) {
                 std::cerr << "error: " << issues.size()
-                          << " problem(s) with the SE circuits; they do not measure what the "
-                             "protocol declares:\n";
+                          << " circuit validity problem(s); the protocol is not valid:\n";
                 for (const auto& issue : issues) std::cerr << "  " << issue << "\n";
-                std::cerr << "(--skip-se-check verifies the circuits as written anyway)\n";
+                std::cerr << "(--skip-circuit-check verifies the circuits as written anyway)\n";
                 return 2;
             }
         }

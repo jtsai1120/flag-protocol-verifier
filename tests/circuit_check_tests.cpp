@@ -1,6 +1,6 @@
-// Tests for the SE circuit check (ftec/se_check.hpp).
+// Tests for the circuit validity check (ftec/circuit_check.hpp).
 //
-//   se_check_tests [--bad] <protocol.fpdl>...
+//   circuit_check_tests [--bad] <protocol.fpdl>...
 //
 // Every protocol given must pass the check, except one marked --bad, which
 // must fail it; then a set of deliberately broken
@@ -9,7 +9,7 @@
 
 #include "ftec/dag.hpp"
 #include "ftec/qasm.hpp"
-#include "ftec/se_check.hpp"
+#include "ftec/circuit_check.hpp"
 
 #include <filesystem>
 #include <iostream>
@@ -42,6 +42,7 @@ fpdl::ParseResult expand(const std::filesystem::path& source) {
 // The [[5,1,3]] code, and LL25's fully parallel flagged circuit for it (four
 // syndrome qubits, four flags), as the base the broken variants edit.
 const std::vector<std::string> kCode = {"XZZXI", "IXZZX", "XIXZZ", "ZXIXZ"};
+const std::vector<std::string> kLogicals = {"XXXXX", "ZZZZZ"};
 
 const std::string kGood = R"(OPENQASM 3.0;
 qubit[5] data;
@@ -78,7 +79,11 @@ std::vector<std::string> run(const std::string& qasm) {
     c.syndrome_qubits = "syn";
     c.flag_qubits     = "flag";
     c.measures        = kCode;
-    return ftec::check_se_circuit(ftec::parse_qasm(qasm, "test"), c, kCode);
+    std::vector<std::string> issues;
+    for (const auto& i : ftec::check_circuit(ftec::parse_qasm(qasm, "test"), c, kCode, kLogicals)) {
+        issues.push_back(i.to_string());
+    }
+    return issues;
 }
 
 void expect(const std::string& name, const std::string& qasm, const std::string& message) {
@@ -104,7 +109,7 @@ int main(int argc, char** argv) {
         bad = false;
         try {
             const auto dag    = ftec::build_dag(expand(source), source.parent_path());
-            const auto issues = ftec::check_se_circuits(dag);
+            const auto issues = ftec::check_circuits(dag).errors;
             if (expect_bad) {
                 check(!issues.empty(), name + ": expected SE-check issues, found none");
                 if (!issues.empty()) std::cout << name << ": caught (" << issues.size() << " issues), as expected\n";
@@ -136,16 +141,25 @@ int main(int argc, char** argv) {
     expect("a syndrome bit never measured", edit(kGood, "h syn[3]; m[3] = measure syn[3];", ""), "m[3] is never measured");
     expect("ancilla reused without a reset",
            edit(kGood, "h syn[1]; m[1] = measure syn[1];", "h syn[1]; m[1] = measure syn[1]; h syn[1]; cz syn[1], data[0]; h syn[1]; m[1] = measure syn[1];"),
-           "also depends on the earlier measurement");
+           "depends on the earlier measurement");
     expect("ancilla never prepared in |+>", edit(kGood, "reset syn[2]; h syn[2];", "reset syn[2];"), "m[2] is random");
     expect("flag coupled to a data qubit", edit(kGood, "cx syn[0], flag[0]; cx syn[1], flag[1];",
                                                 "cx syn[0], flag[0]; cx data[4], flag[1];"),
            "f[1] is random");
 
+    expect("syndrome sign flipped (a warning)",
+           edit(kGood, "h syn[0]; m[0]", "z syn[0]; h syn[0]; m[0]"), "m[0] observes -XZZXI");
+    expect("a stray Hadamard on the data",
+           edit(kGood, "h syn[0]; m[0]", "h data[2]; h syn[0]; m[0]"), "the circuit disturbs the encoded state");
+    expect("a stray X on the data flips the logical sign (a warning)",
+           edit(kGood, "h syn[0]; m[0]", "x data[0]; h syn[0]; m[0]"), "sign: logical ZZZZZ comes out as -ZZZZZ");
+    expect("data error does not pass through (a CX between data qubits)",
+           edit(kGood, "h syn[0]; m[0]", "cx data[0], data[1]; h syn[0]; m[0]"), "is not the same error up to a stabilizer");
+
     if (failures) {
         std::cerr << failures << " check(s) failed\n";
         return 1;
     }
-    std::cout << "every SE circuit measures what it declares, and every broken one is caught\n";
+    std::cout << "every circuit is valid, and every broken one is caught\n";
     return 0;
 }

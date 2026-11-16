@@ -53,7 +53,7 @@ protocol Du24_[[17,1,5]]_parallel:
             qd: data
             qm: syn
             qf: flag
-            g: [[Z7, Z8, Z11, Z12], [Z11, Z12, Z15, Z16],
+            g: [[Z11, Z12, Z15, Z16], [Z7, Z8, Z11, Z12],
                 [Z8, Z12, Z16, Z17], [Z9, Z10, Z13, Z14]]
             #-flag: 2
         }
@@ -74,7 +74,7 @@ protocol Du24_[[17,1,5]]_parallel:
             qd: data
             qm: syn
             qf: flag
-            g: [[X7, X8, X11, X12], [X11, X12, X15, X16],
+            g: [[X11, X12, X15, X16], [X7, X8, X11, X12],
                 [X8, X12, X16, X17], [X9, X10, X13, X14]]
             #-flag: 2
         }
