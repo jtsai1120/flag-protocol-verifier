@@ -3,7 +3,8 @@
 # (emcc/em++/emar on PATH).
 #
 #   site/playground/ftec.{js,wasm}   the verifier, ftec_main() instead of main()
-#   site/spbdd/spbdd.{js,wasm}       SPBDD with JavaScript bindings
+#   site/spbdd/spbdd.{js,wasm}       SPBDD with JavaScript bindings, under the
+#                                    playground's C++ interpreter (site/spbdd/cpp.js)
 #   site/playground/protocols.json   every protocol in protocols/, for the picker
 
 EMCXX ?= em++

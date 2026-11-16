@@ -1,16 +1,16 @@
-// JavaScript bindings for SPBDD, for the SPBDD playground.
+// JavaScript bindings for SPBDD, used by the SPBDD playground's C++
+// interpreter (site/spbdd/cpp.js), which maps C++ calls onto them.
 //
-// The API mirrors the C++ one name for name (snake_case kept), with the
-// operators spelled as methods:
+// The API mirrors the C++ one name for name, with the operators spelled as
+// methods:
 //
 //   a | b  -> a.union(b)        a & b -> a.intersect(b)    a - b -> a.minus(b)
 //   a ^ b  -> a.xor(b)          ~a    -> a.complement()     a * b -> a.mul(b)
 //   a == b -> a.equals(b)
 //
-// Gates mutate the set in place, as in C++; web/spbdd/prelude.js makes them
-// return the set so they chain (s.h(0).cx(0, 1)). Vectors cross the boundary
-// as JS arrays, syndromes and logical components as bit strings ("0101"), and
-// a QEC-condition violation as [e1, e2] or null.
+// Gates mutate the set in place, as in C++. Vectors cross the boundary as JS
+// arrays, syndromes and logical components as bit strings ("0101"), and a
+// QEC-condition violation as [e1, e2] or null.
 
 #include "spbdd/spbdd.hpp"
 
@@ -142,6 +142,11 @@ val p_elements(const pset& s, int limit) {
     return to_array(out);
 }
 
+// for_each_element with a JS callback; stops when it returns false.
+void p_for_each(const pset& s, val fn) {
+    s.for_each_element([&](const std::string& e) { return fn(e).as<bool>(); });
+}
+
 val p_any_element(const pset& s) {
     const auto e = s.any_element();
     return e ? val(*e) : val::null();
@@ -235,6 +240,7 @@ EMSCRIPTEN_BINDINGS(spbdd) {
         .function("commute_with", &ctx_commute_with);
 
     class_<pset>("PSet")
+        .constructor<>()
         .function("union", &p_union)
         .function("intersect", &p_intersect)
         .function("minus", &p_minus)
@@ -267,6 +273,7 @@ EMSCRIPTEN_BINDINGS(spbdd) {
         .function("measure_x", &p_measure_x)
         .function("measure_y", &p_measure_y)
         .function("elements", &p_elements)
+        .function("for_each_element", &p_for_each)
         .function("any_element", &p_any_element);
 
     class_<code>("Code")

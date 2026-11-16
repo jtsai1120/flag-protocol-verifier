@@ -1,128 +1,58 @@
-// SPBDD playground: edit a JavaScript program against the SPBDD bindings and
-// run it in a worker.
+// SPBDD playground: edit a C++ program against SPBDD and run it with the
+// interpreter in cpp.js, over the WebAssembly build of the library, in a worker.
 
 (() => {
   'use strict';
 
-  const SURFACE_3 = "['ZIIZIIIII', 'IZZIZZIII', 'IIIZZIZZI', 'IIIIIZIIZ',\n" +
-                    "     'IXXIIIIII', 'XXIXXIIII', 'IIIIXXIXX', 'IIIIIIXXI']";
-
+  // Each example is a complete C++ program that also compiles with
+  // g++ -std=c++17 prog.cpp libspbdd.a, with the same output.
   const EXAMPLES = [
-    ['Sets and products', `// A context fixes the number of qubits. Only one can be alive at a time.
-const ctx = new spbdd.Context(2);
-
-const s = ctx.from_list(['XI', 'ZZ']);
-print('s          =', s);
-print('s * s      =', s.mul(s));        // setwise product, phases ignored
-print('|s * s|    =', s.mul(s).size());
-print('s | {YY}   =', s.union(ctx.from_str('YY')));
-print('s & {ZZ}   =', s.intersect(ctx.from_str('ZZ')));
-print('all Paulis =', ctx.all().size());
-print('<XI, ZZ>   =', ctx.generated_by(['XI', 'ZZ']));
-`],
-    ['Weight and patterns', `const ctx = new spbdd.Context(17);
-
-// Sets far too large to list are still small diagrams.
-for (const w of [1, 2, 3, 4]) {
-  const e = ctx.weight_at_most(w);
-  print(\`weight <= \${w}: \${e.size()} Paulis in \${e.node_count()} BDD nodes\`);
-}
-
-// '*' stands for any of I, X, Y, Z.
-const p = ctx.matching('X*Z**************');
-print('X on qubit 0 and Z on qubit 2:', p.size());
-print('...and weight exactly 3:', p.intersect(ctx.weight_exactly(3)));
-`],
-    ['Clifford gates and measurement', `const ctx = new spbdd.Context(3);
-
-// Gates act on every element at once, in place, and chain.
-const e = ctx.from_list(['XII', 'IZI', 'IIY']);
-print('before          :', e);
-e.h(0).cx(0, 1).cz(1, 2);
-print('after H0 CX01 CZ12:', e);
-
-// Measuring Z on qubit 2 splits the set by whether each element
-// commutes (meas_0) or anticommutes (meas_1) with Z2.
-const m = e.measure_z(2);
-print('commute with Z2    :', m.meas_0);
-print('anticommute with Z2:', m.meas_1);
-`],
-    ['Faults through a circuit', `// Track every error one fault can leave behind in a small circuit:
-// CX(0,1), then CX(1,2). Each two-qubit gate is a fault location.
-const ctx = new spbdd.Context(3);
-
-const t0 = ctx.identity();               // no faults: just III
-const t1 = ctx.empty();                  // errors from exactly one fault
-
-t0.cx(0, 1);
-t1.cx(0, 1);
-const spawned = t0.fault_inject([0, 1]); // a fault on the first gate
-const t1a = t1.union(spawned);
-
-t0.cx(1, 2);
-t1a.cx(1, 2);
-const t1b = t1a.union(t0.fault_inject([1, 2]));
-
-print('one fault can leave', t1b.size(), 'different errors');
-print('of weight 3:', t1b.intersect(ctx.weight_exactly(3)));
-`],
-    ['The [[5,1,3]] code', `const ctx = new spbdd.Context(5);
-const code = new spbdd.Code(ctx, ['XZZXI', 'IXZZX', 'XIXZZ', 'ZXIXZ'], 3);
-
-print('n, k, d  :', code.n(), code.k(), code.d());
-print('logical X:', code.logical_X_operators(), ' logical Z:', code.logical_Z_operators());
-print('|S| =', code.S().size(), ' |N(S)| =', code.N().size(), ' |N(S)-S| =', code.NmS().size());
-
-for (const e of ['IIIII', 'XIIII', 'IZIII', 'IIYII'])
-  print('syndrome of', e, '=', code.syndrome_of(e));
-
-const w1 = ctx.weight_at_most(1);
-print('weight <= 1 with syndrome 1000:', code.by_syndrome('1000').intersect(w1));
-`],
-    ['QEC condition, d = 3 surface code', `// A distance-3 code corrects every weight-1 error but not every weight-2 one.
-// All four methods give the same answer; compare their cost.
-const ctx = new spbdd.Context(9);
-const code = new spbdd.Code(ctx, ${SURFACE_3}, 3);
-
-for (const w of [1, 2]) {
-  const errors = ctx.weight_at_most(w);
-  for (const method of ['bruteforce', 'table', 'image', 'square']) {
-    const t = performance.now();
-    const v = code.find_qec_cond_violation(errors, method);
-    const verdict = v ? \`violated by \${v[0]} and \${v[1]}\` : 'satisfied';
-    print(\`weight <= \${w}, \${method.padEnd(10)} \${verdict}  (\${(performance.now() - t).toFixed(1)} ms)\`);
-  }
-}
-`],
+    ['01-sets.cpp', 'Sets and products'],
+    ['02-weights.cpp', 'Weights and patterns'],
+    ['03-gates.cpp', 'Clifford gates and measurement'],
+    ['04-faults.cpp', 'Faults through a circuit'],
+    ['05-code.cpp', 'The [[5,1,3]] code'],
+    ['06-qec-condition.cpp', 'QEC condition, d = 3 surface code'],
   ];
 
-  const STORE_KEY = 'spbdd-playground-v1';
+  const STORE_KEY = 'spbdd-playground-cpp-v1';
   const $ = id => document.getElementById(id);
   const editor = $('editor'), sel = $('example'), out = $('console');
   const runBtn = $('run'), stopBtn = $('stop'), statusEl = $('status');
   let worker = null, ready = false, running = false, timer = null;
+  const sources = new Map();
 
   function stored() { try { return JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (_) { return {}; } }
-  function store(data) { try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (_) { /* ignore */ } }
+  function store() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ example: sel.value, code: editor.value })); } catch (_) { /* ignore */ }
+  }
 
-  EXAMPLES.forEach(([title], i) => sel.append(new Option(title, String(i))));
+  function loadExample(file) {
+    if (sources.has(file)) return Promise.resolve(sources.get(file));
+    return fetch('examples/' + file).then(r => {
+      if (!r.ok) throw new Error(`${file}: HTTP ${r.status}`);
+      return r.text();
+    }).then(text => { sources.set(file, text); return text; });
+  }
+
+  function showExample(file) {
+    loadExample(file).then(text => { editor.value = text; store(); })
+      .catch(err => { line('could not load the example: ' + err.message, 'err'); });
+  }
+
+  for (const [file, title] of EXAMPLES) sel.append(new Option(title, file));
   const saved = stored();
-  sel.value = String(saved.example ?? 0);
-  editor.value = saved.code ?? EXAMPLES[Number(sel.value)][1];
+  if (saved.example && EXAMPLES.some(([f]) => f === saved.example)) sel.value = saved.example;
+  if (saved.code) editor.value = saved.code;
+  else showExample(sel.value);
 
-  sel.addEventListener('change', () => {
-    editor.value = EXAMPLES[Number(sel.value)][1];
-    store({ example: Number(sel.value), code: editor.value });
-  });
-  $('reset').addEventListener('click', () => {
-    editor.value = EXAMPLES[Number(sel.value)][1];
-    store({ example: Number(sel.value), code: editor.value });
-  });
-  editor.addEventListener('input', () => store({ example: Number(sel.value), code: editor.value }));
+  sel.addEventListener('change', () => showExample(sel.value));
+  $('reset').addEventListener('click', () => showExample(sel.value));
+  editor.addEventListener('input', store);
   editor.addEventListener('keydown', e => {
     if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
-      editor.setRangeText('  ', editor.selectionStart, editor.selectionEnd, 'end');
+      editor.setRangeText('    ', editor.selectionStart, editor.selectionEnd, 'end');
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); if (!runBtn.disabled) run(); }
   });
@@ -135,14 +65,28 @@ for (const w of [1, 2]) {
     out.scrollTop = out.scrollHeight;
   }
 
+  // Put the caret on the line an error points at.
+  function goToLine(n) {
+    const lines = editor.value.split('\n');
+    let pos = 0;
+    for (let i = 0; i < Math.min(n - 1, lines.length); i++) pos += lines[i].length + 1;
+    editor.focus();
+    editor.setSelectionRange(pos, pos + (lines[n - 1] || '').length);
+  }
+
   function spawn() {
     ready = false;
     worker = new Worker('worker.js');
     worker.onmessage = ({ data }) => {
-      if (data.type === 'ready') { ready = true; if (statusEl.textContent.startsWith('Loading')) statusEl.textContent = 'Ready'; update(); }
-      else if (data.type === 'out') line(data.text, data.err ? 'err' : '');
-      else if (data.type === 'done') {
-        line(`\n[${data.ok ? 'done' : 'failed'}, ${data.ms.toFixed(1)} ms]`, 'sys');
+      if (data.type === 'ready') {
+        ready = true;
+        if (statusEl.textContent.startsWith('Loading')) statusEl.textContent = 'Ready';
+        update();
+      } else if (data.type === 'out') {
+        line(data.text, data.err ? 'err' : '');
+        if (data.line) goToLine(data.line);
+      } else if (data.type === 'done') {
+        line(`\n[${data.ok ? 'exit ' + data.rc : 'stopped by an error'}, ${data.ms.toFixed(1)} ms]`, 'sys');
         finish(data.ok ? 'Done' : 'Finished with an error');
       }
     };

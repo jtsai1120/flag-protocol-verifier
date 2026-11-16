@@ -160,7 +160,10 @@ in the browser as WebAssembly.
 
 - The verifier playground runs the bundled protocols or your own `.fpdl` and
   `.qasm` files.
-- The SPBDD playground runs JavaScript programs against SPBDD.
+- The SPBDD playground runs C++ programs against SPBDD. A subset of C++17 is
+  interpreted (`site/spbdd/cpp.js`) on top of SPBDD's WebAssembly build; the
+  examples in `site/spbdd/examples/` are complete programs that also compile
+  with g++, and `make check-site` checks that both print the same.
 
 `make site` compiles both with Emscripten and bundles the protocols into
 `site/playground/protocols.json`. The build outputs are not committed to

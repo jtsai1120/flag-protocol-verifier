@@ -275,7 +275,7 @@ tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]</code></pre>
       <h3><a href="playground/">Verifier playground</a></h3>
       <p>Pick any bundled protocol or add your own <code>.fpdl</code> and <code>.qasm</code> files, edit them, and verify. Distance-3 protocols finish instantly. The distance-5 ones run for several minutes, about two and a half times their native time.</p>
       <h3><a href="spbdd/">SPBDD playground</a></h3>
-      <p>Write JavaScript against SPBDD’s API: build Pauli sets, push them through Clifford gates, inject faults, define a stabilizer code and ask for a QEC-condition violation. Examples are included.</p>
+      <p>Write C++ against SPBDD: build Pauli sets, push them through Clifford gates, inject faults, define a stabilizer code and ask for a QEC-condition violation. A small C++ interpreter runs your program on the WebAssembly build of the library. The examples are complete programs that also compile with <code>g++</code> and print the same.</p>
     </div>
   </div>
 </section>
