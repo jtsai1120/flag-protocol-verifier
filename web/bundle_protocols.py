@@ -58,6 +58,18 @@ def main():
             name, summary = line.split("\t", 1)
             expected[name] = summary
 
+    # The results page's table runs (tools/site_bench.py), when there are
+    # any, are the newest verdicts and timings; the lists above fill the gaps.
+    measured, seconds = {}, {}
+    if len(sys.argv) > 4 and Path(sys.argv[4]).exists():
+        for run in json.loads(Path(sys.argv[4]).read_text())["runs"]:
+            if run.get("config") != "table" or run.get("status") != "ok" or "failures" not in run:
+                continue
+            measured[run["protocol"]] = (f"min_t={run.get('min_t', -1)} failures={run['failures']}"
+                                         + (f" invalid={run['invalid']}" if "invalid" in run else ""))
+            if "total_s" in run:
+                seconds[run["protocol"]] = run["total_s"]
+
     protocols = []
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
         fpdls = sorted(d.glob("*.fpdl"))
@@ -72,9 +84,10 @@ def main():
             "name": d.name,
             "entry": entry,
             "n": n, "k": k, "d": dist,
-            "expected": None if d.name in SE_CHECK_FAILS else expected.get(d.name) or KNOWN_VERDICTS.get(d.name),
+            "expected": None if d.name in SE_CHECK_FAILS else
+                        measured.get(d.name) or expected.get(d.name) or KNOWN_VERDICTS.get(d.name),
             "se_check_fails": d.name in SE_CHECK_FAILS,
-            "native_seconds": NATIVE_SECONDS.get(d.name, 0.1 if dist <= 3 else None),
+            "native_seconds": seconds.get(d.name, NATIVE_SECONDS.get(d.name, 0.1 if dist <= 3 else None)),
             "files": files,
         })
     out.parent.mkdir(parents=True, exist_ok=True)

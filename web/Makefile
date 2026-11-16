@@ -4,6 +4,7 @@
 #
 #   site/playground/ftec.{js,wasm}   the verifier, ftec_main() instead of main()
 #   site/playground/protocols.json   every protocol in protocols/, for the picker
+#   site/results/results.json        web/results.json (tools/site_bench.py), for the results page
 
 EMCXX ?= em++
 EMCC  ?= emcc
@@ -20,7 +21,7 @@ FTEC_SRC := src/ftec_verify_main.cpp src/fpdl/parser.cpp src/ftec/qasm.cpp src/f
             src/ftec/verify.cpp src/ftec/spbdd_backend.cpp src/ftec/circuit_check.cpp
 
 .PHONY: all spbdd-playground FORCE
-all: site/playground/ftec.js site/playground/protocols.json
+all: site/playground/ftec.js site/playground/protocols.json site/results/results.json
 
 spbdd-playground: web/spbdd-playground/spbdd.js
 
@@ -47,4 +48,7 @@ web/spbdd-playground/spbdd.js: web/spbdd_bind.cpp $(WASM_LIB)
 # Rebuilt every time: it is cheap, and protocol directory names contain
 # brackets, which make would read as patterns in a prerequisite list.
 site/playground/protocols.json: FORCE
-	python3 web/bundle_protocols.py protocols tests/expected.txt $@
+	python3 web/bundle_protocols.py protocols tests/expected.txt $@ web/results.json
+
+site/results/results.json: FORCE
+	python3 web/results_json.py web/results.json protocols $@

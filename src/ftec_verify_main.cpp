@@ -55,7 +55,7 @@ std::string human_bytes(std::size_t bytes) {
 std::string human_seconds(std::chrono::steady_clock::duration elapsed) {
     const double seconds = std::chrono::duration<double>(elapsed).count();
     std::ostringstream out;
-    out << std::fixed << std::setprecision(seconds < 10 ? 2 : 1) << seconds << " s";
+    out << std::fixed << std::setprecision(seconds < 1 ? 4 : seconds < 10 ? 2 : 1) << seconds << " s";
     return out.str();
 }
 
@@ -226,6 +226,15 @@ int main(int argc, char** argv) {
             const auto check_started = std::chrono::steady_clock::now();
             const auto report = ftec::check_circuits(dag);
             circuit_check_time = std::chrono::steady_clock::now() - check_started;
+            // One line for tools: the cost of circuit validity on its own.
+            std::cout << "circuit check   : "
+                      << (report.errors.empty() ? std::string("valid")
+                                                : std::to_string(report.errors.size()) + " problem(s)")
+                      << ", " << report.warnings.size() << " warning(s), " << std::fixed
+                      << std::setprecision(4)
+                      << std::chrono::duration<double>(circuit_check_time).count() << " s, peak "
+                      << human_bytes(peak_memory_bytes()) << "\n";
+            std::cout.unsetf(std::ios::floatfield);
             for (const auto& warning : report.warnings) std::cerr << "warning: " << warning << "\n";
             const auto& issues = report.errors;
             if (!issues.empty()) {
@@ -291,7 +300,7 @@ int main(int argc, char** argv) {
                 }
             }
             std::cout << "validity time   : " << std::fixed << std::setprecision(3)
-                      << result.validity_seconds << " s at the terminals";
+                      << std::setprecision(4) << result.validity_seconds << " s at the terminals";
             if (!skip_circuit_check) {
                 std::cout << ", plus "
                           << std::chrono::duration<double>(circuit_check_time).count()

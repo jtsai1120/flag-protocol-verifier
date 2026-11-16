@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verifier results</title>
+<meta name="description" content="Circuit validity, protocol validity and correctability of every bundled protocol: verdicts, run times and peak memory, method by method.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&display=swap">
+<link rel="stylesheet" href="../assets/site.css">
+<link rel="stylesheet" href="results.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="bar">
+  <a class="home" href="../">Flag protocol verifier</a>
+  <nav aria-label="Site">
+    <a class="sec" href="../#checks">What it checks</a>
+    <a class="sec" href="../#formats">Formats</a>
+    <a href="../playground/">Playground</a>
+    <a href="./" aria-current="page">Results</a>
+  </nav>
+  <a class="gh" href="https://github.com/jtsai1120/flag-protocol-verifier">GitHub</a>
+</header>
+
+<main id="main" class="results-main">
+  <div class="results-head">
+    <h1>Results</h1>
+    <p class="lede-sm">Every bundled protocol, verified natively with input errors (<i>r</i> + <i>s</i> ≤ <i>t</i>) and all three checks: circuit validity, protocol validity and correctability. Rows are protocols; choose the columns below. Each run is its own process, so its peak memory is its own.</p>
+    <p class="meta-line" id="meta-line">Loading results…</p>
+  </div>
+
+  <details class="picker" id="picker">
+    <summary class="picker-head">
+      <h2 id="picker-title">Columns</h2>
+      <span class="picker-count" id="picker-count"></span>
+      <span class="spacer"></span>
+      <span class="picker-actions">
+        <button class="small-btn" type="button" id="reset-cols">Defaults</button>
+        <button class="small-btn" type="button" id="clear-cols">Clear</button>
+        <button class="small-btn" type="button" id="csv">Download CSV</button>
+      </span>
+    </summary>
+    <p class="picker-note">Tick a measure under a run configuration to add it as a column. The four methods answer the final E1E2 query of correctability differently and give the same verdicts; “table, no validity” is the table run with <code>--no-validity</code>, for the cost of validity by difference. Click a column heading to sort.</p>
+    <div class="table-scroll">
+      <table class="matrix" id="matrix"></table>
+    </div>
+  </details>
+
+  <section class="data" aria-label="Results table">
+    <div class="table-scroll">
+      <table class="results" id="results"></table>
+    </div>
+    <dl class="defs" id="defs"></dl>
+  </section>
+</main>
+
+<footer class="site">
+  <span>Measured on 2 vCPU with two runs in parallel; times are wall-clock seconds inside the verifier.</span>
+  <a href="https://github.com/jtsai1120/flag-protocol-verifier/blob/main/tools/site_bench.py">How the data are collected</a>
+</footer>
+
+<script src="results.js"></script>
+</body>
+</html>

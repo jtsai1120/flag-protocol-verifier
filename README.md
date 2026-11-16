@@ -271,7 +271,20 @@ verifier in the browser as WebAssembly, on the bundled protocols or on your
 own `.fpdl` and `.qasm` files.
 
 `make site` compiles the verifier with Emscripten and bundles the protocols into
-`site/playground/protocols.json`. The build outputs are not committed to
+`site/playground/protocols.json`.
+
+The results page (`site/results/`) lists every bundled protocol with the
+columns the reader picks: verdicts, the time of each check (circuit validity,
+protocol validity, correctability), peak memory and sizes, for each E1E2
+method and for a run without the validity check. Its data come from
+`tools/site_bench.py`, which runs each protocol natively in its own process and
+merges the parsed statistics into `web/results.json`; `make site` publishes
+that file.
+
+```bash
+tools/site_bench.py --configs table,table-noval --jobs 2 --skip 49,1,7
+tools/site_bench.py --configs image,square,bruteforce --resume --skip 49,1,7
+``` The build outputs are not committed to
 `main`; the published copy lives on the `gh-pages` branch. To preview locally,
 serve the directory: `python3 -m http.server -d site`.
 
