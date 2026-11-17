@@ -9,7 +9,6 @@
     { id: 'image', label: 'image' },
     { id: 'square', label: 'square' },
     { id: 'bruteforce', label: 'bruteforce' },
-    { id: 'table-noval', label: 'table, validity off', noValidity: true },
   ];
   const DEFAULT_COLS = ['circuit_s@table', 'validity_s@table', 'correctability_s@table'];
 
