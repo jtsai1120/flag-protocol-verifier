@@ -9,7 +9,7 @@
     { id: 'image', label: 'image' },
     { id: 'square', label: 'square' },
     { id: 'bruteforce', label: 'bruteforce' },
-    { id: 'table-noval', label: 'table, no validity', noValidity: true },
+    { id: 'table-noval', label: 'table, validity off', noValidity: true },
   ];
   const DEFAULT_COLS = ['circuit_s@table', 'validity_s@table', 'correctability_s@table'];
 
@@ -88,6 +88,16 @@
     { group: 'Size', key: 'cond2', label: 'Records by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Terminal records only Condition 2 settles.' },
     { group: 'Size', key: 'fqcv_setsize_max', label: 'Largest error set', kind: 'count', get: r => num(r.fqcv_setsize_max), def: 'Elements of the largest set given to the E1E2 query.', fmt: big },
   ];
+  // Columns follow the order of the checks: circuit validity, then protocol
+  // validity, then correctability, then whole-run measures.
+  const STAGE = {
+    circuit_s: 0, circuit_peak_bytes: 0, circuit: 0,
+    validity_s: 1, validity_facts_s: 1, flag_condition_s: 1, validity_rss_growth_bytes: 1, control: 1, cond2: 1,
+    ftec: 3, total_s: 3, peak_memory_bytes: 3,
+  };
+  const stageOf = key => STAGE[key] ?? 2;
+  const GROUPS = [...new Set(METRICS.map(m => m.group))];
+  METRICS.sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || stageOf(a.key) - stageOf(b.key));
   const METRIC = Object.fromEntries(METRICS.map(m => [m.key, m]));
   const CONFIG = Object.fromEntries(CONFIGS.map(c => [c.id, c]));
 
@@ -106,9 +116,19 @@
 
   function readCols() {
     const m = /cols=([^&]*)/.exec(location.hash);
-    if (m) return decodeURIComponent(m[1]).split(',').filter(valid);
-    try { const s = localStorage.getItem('results-cols'); if (s) return s.split(',').filter(valid); } catch (_) {}
+    if (m) return ordered(decodeURIComponent(m[1]).split(',').filter(valid));
+    try { const s = localStorage.getItem('results-cols'); if (s) return ordered(s.split(',').filter(valid)); } catch (_) {}
     return DEFAULT_COLS.slice();
+  }
+  function ordered(list) {
+    const rank = col => {
+      const [k, c] = col.split('@');
+      return [stageOf(k), METRICS.indexOf(METRIC[k]), CONFIGS.indexOf(CONFIG[c])];
+    };
+    return [...new Set(list)].sort((a, b) => {
+      const x = rank(a), y = rank(b);
+      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+    });
   }
   function valid(col) {
     const [k, c] = col.split('@');
@@ -158,7 +178,7 @@
           const box = el('input', { type: 'checkbox', checked: cols.includes(col) });
           box.setAttribute('aria-label', `${m.label}, ${c.label}`);
           box.addEventListener('change', () => {
-            if (box.checked) cols.push(col); else cols = cols.filter(x => x !== col);
+            cols = box.checked ? ordered([...cols, col]) : cols.filter(x => x !== col);
             saveCols(); renderTable();
           });
           td.append(box);
