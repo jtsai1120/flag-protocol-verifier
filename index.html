@@ -81,7 +81,7 @@
       <ul>
         <li><b>Circuit validity.</b> Every extraction circuit measures the generators it declares, lets data errors through unchanged, has no random outcome, and leaves the encoded state alone.</li>
         <li><b>Correctability.</b> For every execution path and every measurement record along it, the verifier builds the set of data errors that an input error of weight <i>r</i> and <i>s</i> faults can leave behind, with <i>r</i> + <i>s</i> ≤ <i>t</i>. That set must not hold two errors <i>E</i><sub>1</sub>, <i>E</i><sub>2</sub> with the same syndrome whose product is a non-trivial logical operator, an element of <i>N</i>(<i>S</i>)∖<i>S</i>. Such a pair means correcting one error damages the encoded state under the other.</li>
-        <li><b>Protocol validity.</b> At every terminal, the record must give the decoder enough to act on: all remaining errors share one syndrome (Condition 1), or the record ends in enough identical, unflagged rounds of flag circuits for the faults it has exposed (Condition 2), or every error from <i>s</i> faults is within weight <i>s</i> of the code space (Condition 3). A protocol that ends without decoding needs Condition 3.</li>
+        <li><b>Protocol validity.</b> Control-flow bugs: a terminal that decodes needs all remaining errors to share one syndrome (Condition 1) or the path to end in enough identical, unflagged full rounds for the faults it has exposed (Condition 2); a terminal that ends without decoding needs every error from <i>s</i> faults to lie within weight <i>s</i> of the code space (Condition 3). Flag bugs: the circuits of every such repeated suffix must satisfy the flag condition it relies on.</li>
       </ul>
       <p>Every two-qubit gate is a fault location, where a fault is any Pauli on the gate’s two qubits. Single-qubit gates, preparations and measurements are taken as fault free, which is the model these protocols assume. Error sets are kept as decision diagrams through <a href="https://github.com/fmlab-iis/spbdd">SPBDD</a>, so the verifier never lists errors one by one.</p>
     </div>
@@ -124,14 +124,14 @@ correctability
 
 protocol validity
 terminal records: Cond 1 2, Cond 2 0, Cond 3 0
-14 invalid terminal record(s) on 1 path(s)
-
+control-flow bugs: 1 path(s), 14 terminal record(s)
   path 0  decode  record=0000
-        Cond 1: IIIII and IIIZI differ on XZZXI; Cond 3: ...
+        Cond 1: IIIII and IIIZI differ on XZZXI; Cond 2: w = 0 needs 2 repeated rounds, the record has 1
+flag bugs       : 0 circuit(s)
 
 FTEC            : rejected</code></pre>
       <p>Take the first line. With one fault, the round can measure <code>0000</code> and leave either <code>IIIIZ</code> or <code>IIYZX</code> on the data. The second is a hook error: one fault at a gate part-way through a check, whose part on the syndrome qubit spread to the data qubits the check couples after it. The two errors have the same syndrome, <code>0100</code>, but differ by a logical operator, so no correction is right for both. This is the failure flag qubits exist to catch.</p>
-      <p>The control flow is not valid either. After one round that measured <code>0000</code>, the data may be clean or may carry <code>IIIZI</code>, left by a fault after the check that would have seen it; the two have different syndromes, and with a single round the decoder has nothing to tell them apart by. The flagged protocols in the repository, such as Chao &amp; Reichardt’s, pass all three checks.</p>
+      <p>The control flow is not valid either. After one round that measured <code>0000</code>, the data may be clean or may carry <code>IIIZI</code>, left by a fault after the check that would have seen it; the two have different syndromes, and with a single round the decoder has nothing to tell them apart by (Condition 1 fails, and one round is not a repeated suffix, so Condition 2 cannot hold). The flagged protocols in the repository, such as Chao &amp; Reichardt’s, pass all three checks.</p>
       <p><a href="playground/">Open the playground</a> and choose <b>New</b> to run this protocol, or pick any bundled one.</p>
     </div>
   </div>
@@ -194,7 +194,7 @@ cd flag-protocol-verifier</code></pre>
       <h3>States are families of Pauli sets</h3>
       <p>A state is the family of error sets indexed by (<i>r</i>, <i>s</i>): input weight <i>r</i> and fault count <i>s</i>, with <i>r</i> + <i>s</i> ≤ <i>t</i>. Running a circuit propagates every set through its gates. At each two-qubit gate, the (<i>r</i>, <i>s</i>) set spawns into the (<i>r</i>, <i>s</i>+1) set, and each measurement splits the state by outcome. Two outcomes are different records, so they never merge. A repeated state is recognised by its diagram’s root node and its result reused.</p>
       <h3>Validity at the terminals</h3>
-      <p>Conditions 1 and 3 are read off the state itself: no generator may split the union of its sets, and each (<i>r</i>, <i>s</i>) set must lie inside the errors of weight at most <i>s</i> times the stabilizer group. Condition 2 is read off the record: it is regrouped into rounds, the faults the record exposes are counted, and the circuits of the final rounds are checked for the flag condition by running each alone with up to <i>k</i> faults. Every invalid path is reported with a counterexample.</p>
+      <p>Conditions 1 and 3 are read off the state itself: no generator may split the union of its sets, and each (<i>r</i>, <i>s</i>) set must lie inside the errors of weight at most <i>s</i> times the stabilizer group. Condition 2 is read off the records of a path: each is regrouped into rounds and the faults it exposes are counted, and the path has the form of Condition 2 when every record ends in the same repeated suffix. The circuits of that suffix are then checked for the flag condition by running each alone with up to <i>k</i> faults. Every bug is reported with a counterexample.</p>
       <h3>The final E1E2 query</h3>
       <p>At each terminal, SPBDD’s <code>code::find_qec_cond_violation</code> looks for two errors with the same syndrome whose product lies in <i>N</i>(<i>S</i>)∖<i>S</i>. It offers four ways to answer, with identical verdicts and different costs:</p>
       <div class="table-scroll"><table>
