@@ -55,6 +55,7 @@ std::string record_text(const std::vector<RecordEntry>& record) {
 
 std::string PathFailure::record_string() const { return record_text(record); }
 std::string ValidityFailure::record_string() const { return record_text(record); }
+std::string FlagFailure::record_string() const { return record_text(record); }
 
 namespace {
 
@@ -370,25 +371,111 @@ private:
 
     // ---- protocol validity -------------------------------------------------
 
+    // The form of Condition 2, read off the record (structural, no faults
+    // searched): w faults exposed, then t - w + 1 identical, unflagged, full
+    // rounds. The flag condition of the suffix is checked separately.
+    struct Cond2 {
+        bool                     holds = false;
+        int                      k     = 0;        // t - w
+        std::vector<std::size_t> suffix;           // record entries of the repeated rounds
+        std::string              why_not;
+    };
+
+    // Condition 2 is a property of a path (its guards make the suffix
+    // repeat), not of a record that happens to repeat. A path counts as having
+    // the form of Cond 2 when every record reaching it has that form; this is
+    // only known once the walk is over, so the records that need Cond 2 and
+    // the flag conditions it asks for are kept per path until finish().
+    struct PathCond2 {
+        bool                                    every_record = true;
+        int                                     k = -1;        // t - w, the same on every record
+        std::map<std::pair<std::string, int>, std::pair<const CircuitRef*, std::size_t>> flags;
+        std::vector<RecordEntry>                flags_example;
+        std::size_t                             needing = 0;   // records Cond 1 does not settle
+        std::optional<ValidityFailure>          needing_example;
+        std::size_t                             settled_by_2 = 0;
+    };
+    std::map<std::size_t, PathCond2> cond2_;
+
     void check_validity(const DagNode& terminal, Backend::StateId state,
                         const std::vector<RecordEntry>& record) {
         const auto facts = backend_.terminal_facts(state);
-        const bool ends  = terminal.terminal_action == "end";
-        std::string reason;
-        if (ends) {
+        if (terminal.terminal_action == "end") {
             if (facts.weight_bounded) { ++result_.by_condition[2]; return; }
-            reason = "ends without decoding, but " + facts.weight_detail;
-        } else {
-            if (facts.same_syndrome)  { ++result_.by_condition[0]; return; }
-            if (facts.weight_bounded) { ++result_.by_condition[2]; return; }
-            const auto why_not_2 = condition_2(record);
-            if (!why_not_2) { ++result_.by_condition[1]; return; }
-            reason = "Cond 1: " + facts.syndrome_detail + "; Cond 3: " + facts.weight_detail +
-                     "; Cond 2: " + *why_not_2;
+            result_.validity_failures.push_back(ValidityFailure{
+                terminal.path_id, terminal.terminal_action, record,
+                "ends without decoding, but " + facts.weight_detail});
+            return;
         }
-        result_.validity_failures.push_back(
-            ValidityFailure{terminal.path_id, terminal.terminal_action, record, reason});
+        PathCond2& path = cond2_[terminal.path_id];
+        const Cond2 form = condition_2(record);
+        // The guards make the suffix repeat only if every record has it, and
+        // with the same w (a suffix whose length varies is not one the guards
+        // require).
+        if (!form.holds || (path.k >= 0 && path.k != form.k)) {
+            path.every_record = false;
+        } else if (path.every_record) {
+            path.k = form.k;
+            if (path.flags_example.empty()) path.flags_example = record;
+            for (const std::size_t e : form.suffix) {
+                const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
+                auto& slot = path.flags[{circuit.qasm.string() + "\n" + circuit.se_name, form.k}];
+                slot.first = &circuit;
+                ++slot.second;
+            }
+        }
+        if (facts.same_syndrome) { ++result_.by_condition[0]; return; }
+        ++path.needing;
+        if (!path.needing_example) {
+            path.needing_example = ValidityFailure{
+                terminal.path_id, terminal.terminal_action, record,
+                "Cond 1: " + facts.syndrome_detail + "; Cond 2: " +
+                    (form.holds ? std::string("other records of this path do not repeat")
+                                : form.why_not)};
+        }
     }
+
+  public:
+    // Settle Cond 2 path by path, and check the flag condition of every path
+    // that has its form (Def. 3.10 (3)), whichever condition settles it.
+    void finish() {
+        for (auto& [path_id, path] : cond2_) {
+            if (path.every_record) {
+                result_.by_condition[1] += path.needing;
+                for (const auto& [key, slot] : path.flags) {
+                    const CircuitRef& circuit = *slot.first;
+                    const int k = key.second;
+                    std::optional<std::string> problem;
+                    if (k > 0) problem = backend_.flag_condition(circuit, k);
+                    if (!problem && !flags_ignore(circuit)) {
+                        problem = std::string("raises a flag without any fault");
+                    }
+                    if (!problem) continue;
+                    FlagFailure* entry = nullptr;
+                    for (auto& f : result_.flag_failures) {
+                        if (f.se_name == circuit.se_name && f.k == k) entry = &f;
+                    }
+                    if (!entry) {
+                        result_.flag_failures.push_back(
+                            FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, path.flags_example});
+                        entry = &result_.flag_failures.back();
+                    }
+                    entry->paths.insert(path_id);
+                    entry->records += slot.second;
+                }
+            } else if (path.needing_example) {
+                // Cond 1 fails on these records and the path has no Cond 2 form.
+                for (std::size_t i = 0; i < path.needing; ++i) {
+                    if (i == 0) result_.validity_failures.push_back(*path.needing_example);
+                    else ++extra_invalid_records_;
+                }
+            }
+        }
+        result_.invalid_records = result_.validity_failures.size() + extra_invalid_records_;
+    }
+
+  private:
+    std::size_t extra_invalid_records_ = 0;
 
     // One round of syndrome extraction, reassembled from consecutive SEs.
     struct Round {
@@ -420,8 +507,8 @@ private:
         return ignore_.emplace(key, ok).first->second;
     }
 
-    // Condition 2 read off the record. nullopt when it holds; otherwise why not.
-    std::optional<std::string> condition_2(const std::vector<RecordEntry>& record) {
+    Cond2 condition_2(const std::vector<RecordEntry>& record) {
+        const auto no = [](std::string why) { Cond2 c; c.why_not = std::move(why); return c; };
         const std::size_t generators = dag_.code.generators.size();
         std::vector<Round> rounds;
         bool readable = true;
@@ -441,8 +528,8 @@ private:
             for (const bool f : record[i].outcome.flag) round.flagged = round.flagged || f;
             round.entries.push_back(i);
         }
-        if (!readable) return std::string("an SE measures something other than the code's generators");
-        if (rounds.empty()) return std::string("no syndrome was measured");
+        if (!readable) return no(std::string("an SE measures something other than the code's generators"));
+        if (rounds.empty()) return no("no syndrome was measured");
 
         const auto full = [&](const Round& r) { return r.syndrome.size() == generators; };
 
@@ -467,36 +554,27 @@ private:
         }
 
         const int t = dag_.code.fault_budget();
-        if (w > t) return "the record exposes " + std::to_string(w) + " faults, more than t";
+        if (w > t) return no("the record exposes " + std::to_string(w) + " faults, more than t");
         const std::size_t need = static_cast<std::size_t>(t - w + 1);
         if (rounds.size() < need) {
-            return "w = " + std::to_string(w) + " needs " + std::to_string(need) +
-                   " repeated rounds, the record has " + std::to_string(rounds.size());
+            return no("w = " + std::to_string(w) + " needs " + std::to_string(need) +
+                      " repeated rounds, the record has " + std::to_string(rounds.size()));
         }
         const Round& last = rounds.back();
         for (std::size_t i = rounds.size() - need; i < rounds.size(); ++i) {
             const Round& r = rounds[i];
             if (!full(r) || r.flagged || r.syndrome != last.syndrome) {
-                return "w = " + std::to_string(w) + ", but the last " + std::to_string(need) +
-                       " rounds are not identical unflagged full rounds";
+                return no("w = " + std::to_string(w) + ", but the last " + std::to_string(need) +
+                          " rounds are not identical unflagged full rounds");
             }
         }
-        const int k = t - w;
+        Cond2 form;
+        form.holds = true;
+        form.k     = t - w;
         for (std::size_t i = rounds.size() - need; i < rounds.size(); ++i) {
-            for (const std::size_t e : rounds[i].entries) {
-                const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
-                if (k > 0) {
-                    if (const auto problem = backend_.flag_condition(circuit, k)) {
-                        return circuit.se_name + " is not " + std::to_string(k) +
-                               "-flag: " + *problem;
-                    }
-                }
-                if (!flags_ignore(circuit)) {
-                    return circuit.se_name + " raises a flag without any fault";
-                }
-            }
+            for (const std::size_t e : rounds[i].entries) form.suffix.push_back(e);
         }
-        return std::nullopt;
+        return form;
     }
 
     std::map<std::string, std::vector<std::optional<std::size_t>>> bits_;
@@ -522,6 +600,12 @@ VerifyResult verify(const Dag& dag, Backend& backend, const VerifyOptions& optio
     std::vector<RecordEntry> record;
     Walker walker(dag, backend, options, result);
     walker.visit(dag.root(), backend.initial_state(), record);
+    if (options.check_validity) {
+        const auto started = std::chrono::steady_clock::now();
+        walker.finish();
+        result.validity_seconds +=
+            std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
+    }
 
     std::sort(result.failures.begin(), result.failures.end(),
               [](const PathFailure& a, const PathFailure& b) {

@@ -51,10 +51,6 @@ def extra_fields(text: str) -> dict:
         row["circuit_peak_bytes"] = int(float(m.group(5)) * bench.UNIT_BYTES[m.group(6)])
     if m := re.search(r"^terminal records: Cond 1 (\d+), Cond 2 (\d+), Cond 3 (\d+)", text, re.M):
         row["cond1"], row["cond2"], row["cond3"] = (int(m.group(i)) for i in (1, 2, 3))
-    if m := re.search(r"^\d+ invalid terminal record\(s\) on (\d+) path\(s\)", text, re.M):
-        row["invalid_paths"] = int(m.group(1))
-    elif "control flow is valid" in text:
-        row["invalid_paths"] = 0
     if m := re.search(rf"^validity facts\s*:.*, {NUM} s", text, re.M):
         row["validity_facts_s"] = float(m.group(1))
     if m := re.search(rf"^flag condition\s*:.*, {NUM} s", text, re.M):

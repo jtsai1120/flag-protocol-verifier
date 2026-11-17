@@ -46,7 +46,9 @@
     const invalid = /invalid=(\d+)/.exec(p.expected);
     if (failures[1] !== '0') return { good: false, text: `not correctable at t = ${minT ? minT[1] : '?'}` };
     if (!invalid) return { good: true, text: 'correctable' };
-    if (invalid[1] !== '0') return { good: false, text: 'control flow not valid' };
+    if (invalid[1] !== '0') return { good: false, text: 'control-flow bugs' };
+    const flagBugs = /flagbugs=(\d+)/.exec(p.expected);
+    if (flagBugs && flagBugs[1] !== '0') return { good: false, text: 'flag bugs' };
     return { good: true, text: 'fault tolerant' };
   }
   function codeOf(files, entry) {
@@ -278,8 +280,8 @@
       updateRunButton();
     } else if (data.type === 'out') {
       let cls = data.err ? 'err' : '';
-      if (/^\d+ (unprotected path|invalid terminal record)/.test(data.text) || /^FTEC\s*: rejected/.test(data.text)) cls = 'bad';
-      else if (/^(no unprotected path found|control flow is valid)/.test(data.text) || /^FTEC\s*: accepted/.test(data.text)) cls = 'good';
+      if (/^\d+ unprotected path/.test(data.text) || /^(control-flow bugs|flag bugs\s*):\s*[1-9]/.test(data.text) || /^FTEC\s*: rejected/.test(data.text)) cls = 'bad';
+      else if (/^no unprotected path found/.test(data.text) || /^(control-flow bugs|flag bugs\s*):\s*0 /.test(data.text) || /^FTEC\s*: accepted/.test(data.text)) cls = 'good';
       line(data.text, cls);
     } else if (data.type === 'done') {
       line(`\n[exit ${data.rc}, ${(data.ms / 1000).toFixed(2)} s in the browser]`, 'sys');

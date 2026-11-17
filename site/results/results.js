@@ -77,21 +77,32 @@
       show: r => r.failures === undefined ? null : r.failures === 0 ? ['correctable', 'v-good'] : [`${r.failures} record${r.failures > 1 ? 's' : ''} fail, t = ${r.min_t}`, 'v-bad'],
       def: 'No terminal record leaves two errors with the same syndrome whose product is a non-trivial logical operator.' },
     { group: 'Verdict', key: 'control', label: 'Protocol validity', kind: 'verdict', validity: true,
-      get: r => r.invalid === undefined ? null : r.invalid,
-      show: r => r.invalid === undefined ? null : r.invalid === 0 ? ['valid', 'v-good'] : [`${count(r.invalid)} records, ${r.invalid_paths} path${r.invalid_paths > 1 ? 's' : ''}`, 'v-bad'],
-      def: 'Every terminal record satisfies Condition 1, 2 or 3 of protocol validity (end() needs Condition 3).' },
+      get: r => r.invalid === undefined || r.flag_bugs === undefined ? null : (r.invalid_paths || 0) + r.flag_bugs,
+      show: r => r.invalid === undefined || r.flag_bugs === undefined ? null
+        : (r.invalid_paths || 0) + r.flag_bugs === 0 ? ['valid', 'v-good'] : ['not valid', 'v-bad'],
+      def: 'Valid when there are no control-flow bugs and no flag bugs (Def. 3.10; circuit validity is its own column).' },
+    { group: 'Verdict', key: 'cf_bugs', label: 'Control-flow bugs', kind: 'verdict', validity: true,
+      get: r => r.invalid_paths === undefined ? null : r.invalid_paths,
+      show: r => r.invalid_paths === undefined ? null : r.invalid_paths === 0 ? ['0', 'v-good']
+        : [`${r.invalid_paths} path${r.invalid_paths > 1 ? 's' : ''} (${count(r.invalid)} record${r.invalid > 1 ? 's' : ''})`, 'v-bad'],
+      def: 'Paths with a terminal record that no control-flow condition settles (Def. 3.9): a decoding terminal needs Condition 1 or Condition 2, an ending terminal needs Condition 3.' },
+    { group: 'Verdict', key: 'flag_bugs', label: 'Flag bugs', kind: 'verdict', validity: true,
+      get: r => r.flag_bugs === undefined ? null : r.flag_bugs,
+      show: r => r.flag_bugs === undefined ? null : r.flag_bugs === 0 ? ['0', 'v-good']
+        : [`${r.flag_bugs} circuit${r.flag_bugs > 1 ? 's' : ''}`, 'v-bad'],
+      def: 'Circuits in the repeated suffix of a Condition 2 path that fail the (t − w)-flag condition (Def. 3.10 (3)), whichever condition settles the path.' },
 
     { group: 'Size', key: 'paths', label: 'Paths', kind: 'count', get: r => num(r.paths), def: 'Symbolic execution paths reached.' },
     { group: 'Size', key: 'records', label: 'Terminal records', kind: 'count', get: r => num(r.records), def: 'Distinct measurement records reaching a terminal.' },
     { group: 'Size', key: 'circuits', label: 'Circuits run', kind: 'count', get: r => num(r.circuits), def: 'Extraction circuits actually simulated.' },
-    { group: 'Size', key: 'cond2', label: 'Records by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Terminal records only Condition 2 settles.' },
+    { group: 'Size', key: 'cond2', label: 'Records by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Terminal records of decoding paths that Condition 1 does not settle and Condition 2 does.' },
     { group: 'Size', key: 'fqcv_setsize_max', label: 'Largest error set', kind: 'count', get: r => num(r.fqcv_setsize_max), def: 'Elements of the largest set given to the E1E2 query.', fmt: big },
   ];
   // Columns follow the order of the checks: circuit validity, then protocol
   // validity, then correctability, then whole-run measures.
   const STAGE = {
     circuit_s: 0, circuit_peak_bytes: 0, circuit: 0,
-    validity_s: 1, validity_facts_s: 1, flag_condition_s: 1, validity_rss_growth_bytes: 1, control: 1, cond2: 1,
+    validity_s: 1, validity_facts_s: 1, flag_condition_s: 1, validity_rss_growth_bytes: 1, control: 1, cf_bugs: 1, flag_bugs: 1, cond2: 1,
     ftec: 3, total_s: 3, peak_memory_bytes: 3,
   };
   const stageOf = key => STAGE[key] ?? 2;

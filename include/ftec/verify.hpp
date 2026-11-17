@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -38,19 +39,37 @@ struct ValidityFailure {
     [[nodiscard]] std::string record_string() const;
 };
 
+// A circuit used in the repeated suffix of a record that has the form of
+// Condition 2 but does not satisfy the (t - w)-flag condition (Def. 3.10 (3)),
+// or raises a flag without any fault (Def. 3.7 (2)). One entry per circuit
+// and k, with the first record that needed it.
+struct FlagFailure {
+    std::string              se_name;
+    int                      k = 0;
+    std::string              problem;
+    std::set<std::size_t>    paths;
+    std::size_t              records = 0;
+    std::size_t              path_id = 0;      // first example
+    std::vector<RecordEntry> record;
+
+    [[nodiscard]] std::string record_string() const;
+};
+
 struct VerifyOptions {
     // Stop as soon as a path fails. The smallest failing fault count is still
     // correct: the walk visits states in fault-count order within a node, and
     // min_fault_count is taken over everything seen so far.
     bool stop_at_first_failure = false;
 
-    // Protocol validity (Def. 3.9): at every terminal, one of
-    //   Cond 1  every residual error has the same ideal syndrome;
-    //   Cond 2  the record ends in t - w + 1 identical, unflagged, full rounds,
-    //           w counting the faults the record exposes, and those circuits
-    //           satisfy the (t - w)-flag condition;
-    //   Cond 3  an error from s faults is within weight s of the code space.
-    // A terminal that ends without decoding (end()) needs Cond 3.
+    // Protocol validity (Def. 3.10), checked as in the paper's algorithm:
+    //   control flow (Def. 3.9): a terminal that decodes needs Cond 1 (the
+    //     record determines the ideal syndrome) or Cond 2 (it ends in t - w + 1
+    //     identical, unflagged, full rounds, w counting the faults it exposes);
+    //     a terminal that ends without decoding needs Cond 3 (an error from s
+    //     faults is within weight s of the code space);
+    //   flag condition (Def. 3.10 (3)): wherever a record has the form of
+    //     Cond 2, the circuits of its repeated suffix satisfy the
+    //     (t - w)-flag condition, whether or not Cond 1 also holds.
     bool check_validity = true;
 };
 
@@ -70,15 +89,20 @@ struct VerifyResult {
     std::vector<PathFailure> failures;
 
     // Protocol validity, when checked: how many terminal records each
-    // condition settled (the first that holds, in the order 1, 3, 2), and the
-    // records none did.
+    // condition settled (decoding terminals: Cond 1, else Cond 2; ending
+    // terminals: Cond 3), the records none did (control-flow bugs), and the
+    // circuits that fail the flag condition a Cond 2 suffix needs (flag bugs).
     bool                         validity_checked = false;
     double                       validity_seconds = 0;   // all validity work at terminals
     std::size_t                  by_condition[3]  = {0, 0, 0};
-    std::vector<ValidityFailure> validity_failures;
+    std::vector<ValidityFailure> validity_failures;   // at most one per decoding path
+    std::size_t                  invalid_records = 0; // all records behind them
+    std::vector<FlagFailure>     flag_failures;
 
     [[nodiscard]] bool clean() const { return failures.empty(); }
-    [[nodiscard]] bool valid() const { return validity_failures.empty(); }
+    [[nodiscard]] bool control_flow_valid() const { return validity_failures.empty(); }
+    [[nodiscard]] bool flags_valid() const { return flag_failures.empty(); }
+    [[nodiscard]] bool valid() const { return control_flow_valid() && flags_valid(); }
 };
 
 // Walk the trie depth-first, carrying symbolic states through each SE and

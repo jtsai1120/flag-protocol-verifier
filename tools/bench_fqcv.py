@@ -81,7 +81,10 @@ field("sq_build_total_s", rf"^sq build time\s*:\s*total {NUM} s", lambda m: floa
 field("sq_build_max_s", rf"^sq build time\s*:.*max {NUM} s", lambda m: float(m.group(1)))
 field("validity_s", rf"^validity time\s*:\s*{NUM} s at the terminals", lambda m: float(m.group(1)))
 field("validity_rss_growth_bytes", rf"^validity rss\s*:\s*max growth in one call {SIZE}", to_bytes)
-field("invalid", r"^(\d+) invalid terminal record", lambda m: int(m.group(1)))
+field("invalid", r"^control-flow bugs: \d+ path\(s\)(?:, (\d+) terminal record)?",
+      lambda m: int(m.group(1) or 0))
+field("invalid_paths", r"^control-flow bugs: (\d+) path\(s\)", lambda m: int(m.group(1)))
+field("flag_bugs", r"^flag bugs\s*:\s*(\d+) circuit", lambda m: int(m.group(1)))
 field("diagnostics_s", rf"^diagnostics\s*:\s*{NUM} s", lambda m: float(m.group(1)))
 field("diagram_live", r"^diagram\s*:\s*(\d+) live", lambda m: int(m.group(1)))
 field("diagram_peak", r"^diagram\s*:.*peak (\d+)", lambda m: int(m.group(1)))
@@ -105,8 +108,6 @@ def parse(text: str) -> dict:
         row["pre_fqcv_s"] = max(
             0.0, row["traversal_s"] - row["fqcv_s"] - row.get("diagnostics_s", 0.0)
             - row.get("validity_s", 0.0))
-    if "invalid" not in row and "control flow is valid" in text:
-        row["invalid"] = 0
     return row
 
 
@@ -149,7 +150,8 @@ COLUMNS = [
     ("status", "status"), ("verdict", "verdict"),
     ("pre_fqcv_s", "pre-fqcv time (s)"), ("fqcv_s", "final E1E2 time (s)"),
     ("validity_s", "validity time (s)"), ("validity_rss_growth_bytes", "validity RSS growth (bytes)"),
-    ("invalid", "invalid terminal records"),
+    ("invalid", "control-flow bug records"),
+    ("flag_bugs", "flag bugs (circuits)"),
     ("fqcv_max_call_s", "max single call (s)"), ("fqcv_calls", "fqcv calls"),
     ("expansion_s", "expansion (s)"), ("traversal_s", "traversal (s)"),
     ("total_s", "total (s)"), ("wall_s", "wall (s)"),

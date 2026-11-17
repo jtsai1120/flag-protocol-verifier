@@ -13,8 +13,10 @@ Correction Protocols* (FTEC ⇔ protocol valid ∧ correctable):
    measures the generators it declares, and lets data errors through
    unchanged) and deterministic (no outcome is random, and the encoded state
    is left alone).
-2. **Protocol (control-flow) validity.** At every terminal, what can have
-   happened along the measurement record is something the decoder can act on.
+2. **Protocol validity.** At every terminal, what can have happened along the
+   measurement record is something the decoder can act on (no control-flow
+   bugs), and the flag circuits that a repeated final round relies on satisfy
+   the flag condition (no flag bugs).
 3. **Correctability.** No record leaves two errors with the same syndrome
    whose product lies in `N(S)\S`; correcting one of them would damage the
    encoded state under the other. Executions may start from a data error of
@@ -96,7 +98,8 @@ The output lists:
 - correctability: `no unprotected path found`, or each unprotected path with
   its fault count and measurement record;
 - protocol validity: how many terminal records each control-flow condition
-  settled, and each invalid path with a counterexample;
+  settled, then the control-flow bugs (paths) and the flag bugs (circuits),
+  each with a counterexample;
 - the overall verdict, `FTEC : accepted` or `rejected`;
 - backend statistics: cache hit rates, and the time and BDD sizes of the final
   query;
@@ -202,20 +205,34 @@ r = 0.
 
 ### 3. Protocol validity
 
-At every terminal record, one of the control-flow conditions has to hold:
+Protocol validity (Def. 3.10) is checked as in the paper's algorithm, and its
+failures are reported in two kinds, as in the paper's Table 1.
 
-| Condition | Checked |
-|---|---|
-| 1 | Every error in E_m has the same ideal syndrome (no generator splits E_m) |
-| 2 | The record ends in t − w + 1 identical, unflagged, full rounds, where w counts the faults the record exposes (flags, and changes of syndrome between consecutive unflagged rounds), and those circuits satisfy the (t − w)-flag condition |
-| 3 | Every error from s faults is within weight s of the code space |
+**Control-flow bugs** (Def. 3.9), counted in paths. Every terminal record
+must satisfy the condition its terminal calls for:
 
-A terminal that ends without decoding (`end()`) needs Condition 3. The
+| Terminal | Condition | Checked |
+|---|---|---|
+| `decode(...)` | 1 | Every error in E_m has the same ideal syndrome (no generator splits E_m) |
+| `decode(...)` | 2 | The path ends in t − w + 1 identical, unflagged, full rounds, where w counts the faults its records expose (flags, and changes of syndrome between consecutive unflagged rounds) |
+| `end()` | 3 | Every error from s faults is within weight s of the code space |
+
+Condition 3 is the condition of a terminal that applies the trivial
+correction, so a decoding terminal is not settled by it, and an ending
+terminal is settled by nothing else. Condition 2 is a property of the path:
+every record that reaches the path must end in the same repeated suffix (the
+same w). A record that merely happens to repeat its last round does not count.
+
+**Flag bugs** (Def. 3.10 (3)), counted in circuits. On every path with the form
+of Condition 2, the circuits of the repeated suffix must satisfy the
+(t − w)-flag condition, whether or not Condition 1 also holds there. The
 k-flag condition of a circuit is checked by running the circuit alone with up
 to k faults: whenever no flag is raised, s faults must leave an error within
 weight s of the code space, and a fault-free run must never raise a flag.
-Every invalid path is reported with a counterexample, for example two residual
-errors that the record cannot tell apart.
+
+Each bug is reported with a counterexample: two residual errors the record
+cannot tell apart, an error heavier than its faults allow, or the faults that
+break the flag condition.
 
 ### Results on the bundled protocols
 

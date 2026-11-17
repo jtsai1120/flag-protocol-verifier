@@ -59,13 +59,16 @@ std::string summary(const ftec::VerifyResult& result) {
         out << " [path " << failure.path_id << " t=" << failure.failure.fault_count
             << " record=" << failure.record_string() << ']';
     }
-    // Protocol validity (Def. 3.9): terminal records settled by Cond 1/2/3,
-    // and the paths of those none settles.
+    // Protocol validity (Def. 3.10): terminal records settled by Cond 1/2/3,
+    // the paths of those none settles (control-flow bugs), and the circuits
+    // that fail the flag condition a Cond 2 suffix needs (flag bugs).
     out << " cond=" << result.by_condition[0] << '/' << result.by_condition[1] << '/'
-        << result.by_condition[2] << " invalid=" << result.validity_failures.size();
+        << result.by_condition[2] << " invalid=" << result.invalid_records;
     std::set<std::size_t> paths;
     for (const auto& v : result.validity_failures) paths.insert(v.path_id);
     for (const auto path : paths) out << " [invalid path " << path << ']';
+    out << " flagbugs=" << result.flag_failures.size();
+    for (const auto& f : result.flag_failures) out << " [" << f.se_name << " not " << f.k << "-flag]";
     return out.str();
 }
 

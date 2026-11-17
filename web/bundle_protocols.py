@@ -66,7 +66,8 @@ def main():
             if run.get("config") != "table" or run.get("status") != "ok" or "failures" not in run:
                 continue
             measured[run["protocol"]] = (f"min_t={run.get('min_t', -1)} failures={run['failures']}"
-                                         + (f" invalid={run['invalid']}" if "invalid" in run else ""))
+                                         + (f" invalid={run['invalid']}" if "invalid" in run else "")
+                                         + (f" flagbugs={run['flag_bugs']}" if "flag_bugs" in run else ""))
             if "total_s" in run:
                 seconds[run["protocol"]] = run["total_s"]
 

@@ -284,19 +284,37 @@ int main(int argc, char** argv) {
             std::cout << "\nprotocol validity\n"
                       << "terminal records: Cond 1 " << result.by_condition[0] << ", Cond 2 "
                       << result.by_condition[1] << ", Cond 3 " << result.by_condition[2] << "\n";
-            if (result.valid()) {
-                std::cout << "control flow is valid\n";
+            if (result.control_flow_valid()) {
+                std::cout << "control-flow bugs: 0 path(s)\n";
             } else {
                 std::set<std::size_t> paths;
                 for (const auto& v : result.validity_failures) paths.insert(v.path_id);
-                std::cout << result.validity_failures.size() << " invalid terminal record(s) on "
-                          << paths.size() << " path(s)\n\n";
+                std::cout << "control-flow bugs: " << paths.size() << " path(s), "
+                          << result.invalid_records << " terminal record(s)\n";
                 std::set<std::size_t> shown;
                 for (const auto& v : result.validity_failures) {
                     if (!shown.insert(v.path_id).second) continue;   // one per path
                     std::cout << "  path " << v.path_id << "  " << v.terminal_action
                               << "  record=" << v.record_string() << "\n        " << v.reason
                               << "\n";
+                }
+            }
+            if (result.flags_valid()) {
+                std::cout << "flag bugs       : 0 circuit(s)\n";
+            } else {
+                std::set<std::string> circuits;
+                std::set<std::size_t> paths;
+                for (const auto& f : result.flag_failures) {
+                    circuits.insert(f.se_name);
+                    paths.insert(f.paths.begin(), f.paths.end());
+                }
+                std::cout << "flag bugs       : " << circuits.size() << " circuit(s), needed on "
+                          << paths.size() << " path(s)\n";
+                for (const auto& f : result.flag_failures) {
+                    std::cout << "  " << f.se_name << " is not " << f.k << "-flag: " << f.problem
+                              << "\n        needed by " << f.records << " record(s) on "
+                              << f.paths.size() << " path(s), e.g. path " << f.path_id
+                              << "  record=" << f.record_string() << "\n";
                 }
             }
             std::cout << "validity time   : " << std::fixed << std::setprecision(3)
