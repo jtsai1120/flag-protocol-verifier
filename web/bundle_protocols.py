@@ -33,15 +33,8 @@ NATIVE_SECONDS = {
 # Verdicts of the larger protocols, from the same native runs (tests/expected.txt
 # covers only distance 3).
 KNOWN_VERDICTS = {
-    "Du24_[[17,1,5]]_plain": "min_t=2 failures=36 invalid=52",
-    "CB18_[[17,1,5]]_plain": "min_t=-1 failures=0 invalid=0",
-    "LL25_[[17,1,5]]_[1,1,1,1,1,...]^T": "min_t=-1 failures=0 invalid=4016",
-    "Du24_[[17,1,5]]": "min_t=2 failures=36",
     **{name: "min_t=-1 failures=0" for name in (
-        "CB18_[[25,1,5]]_plain",
-        "CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain", "Du24[[19,1,5]]",
-        "LL25_[[17,1,5]]_[2,2,2,1,1]^T",
-        "LL25_[[19,1,5]]_[1,1,1,...]^T", "LL25_[[19,1,5]]_[2,2,2,1,1,1]^T")},
+        "CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain")},
 }
 
 

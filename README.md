@@ -237,35 +237,42 @@ break the flag condition.
 
 ### Results on the bundled protocols
 
-Distance 3 (`tests/expected.txt`); input errors included:
+Input errors included; `--fqcv=table`. Control-flow bugs count paths, flag
+bugs count circuits, as in the paper's Table 1.
 
-| Protocol | Correctable | Control flow | FTEC |
-|---|---|---|---|
-| CR17 [[5,1,3]] | yes | valid | accepted |
-| LL25 [[5,1,3]] [1,1,1,1]^T | yes | valid | accepted |
-| Bha23 [[7,1,3]] fig5 | yes | valid | accepted |
-| Bha23 [[7,1,3]] fig6 | yes | valid | accepted |
-| Bha23 [[5,1,3]] | yes | 4 invalid paths | rejected |
-
-In Bha23 [[5,1,3]], after a flag the adaptive measurements cannot tell a false
-alarm (`IIIII`) from the hook error `IIZXI`: both read 0 on `XZZXI`, `YXXYI` and
-`XIXZZ`, but they differ on `IXZZX`.
-
-Distance 5, `--fqcv=table`, 2 vCPU, two runs in parallel. Validity cost is the
-difference to the same run with `--no-validity`:
-
-| Protocol | Correctable | Control flow | Validity time | Traversal (with / without validity) | Peak memory (with / without) |
+| Protocol | Circuits | Control-flow bugs | Flag bugs | Correctable | FTEC |
 |---|---|---|---|---|---|
-| CB18 [[17,1,5]] | yes | valid (Cond 2 settles 711 records) | 8.4 s | 176 s / 168 s | 202 / 193 MiB |
-| Du24 [[17,1,5]] plain | no, 36 records at t = 2 | 52 invalid records, 1 path | 11.4 s | 307 s / 293 s | 250 / 236 MiB |
-| LL25 [[17,1,5]] [1,1,1,1,1,...]^T | yes | 4016 invalid records, 2 paths | 17.8 s | 267 s / 242 s | 178 / 158 MiB |
+| CR17 [[5,1,3]] | valid | 0 | 0 | yes | accepted |
+| LL25 [[5,1,3]] [1,1,1,1]^T | valid | 0 | 0 | yes | accepted |
+| LL25 [[5,1,3]] [2,2] | 6 problems | 0 | 0 | no (t = 1) | rejected |
+| LL25 [[5,1,3]] [2,2]^T | 8 problems | 0 | 0 | no (t = 1) | rejected |
+| LL25 [[5,1,3]] [2,2]^T fix_2 | valid | 0 | 0 | no (t = 1) | rejected |
+| Bha23 [[5,1,3]] | valid | 8 | 0 | yes | rejected |
+| Bha23 [[7,1,3]] fig5 | valid | 6 | 0 | yes | rejected |
+| Bha23 [[7,1,3]] fig6 | valid | 0 | 0 | yes | accepted |
+| CB18 [[17,1,5]], [[25,1,5]] | valid | 0 | 0 | yes | accepted |
+| Du24 [[17,1,5]] (parallel flags) | valid | 0 | 2 (`F6X_f`, `F6Z_f`) | no (t = 2) | rejected |
+| Du24 [[17,1,5]] plain | valid | 0 | 1 (`FSE_f`) | no (t = 2) | rejected |
+| Du24 [[19,1,5]] | valid | 0 | 1 (`FSE_f`) | yes | rejected |
+| LL25 [[17,1,5]], [[19,1,5]] [1,1,1,...]^T and [[17,1,5]] [2,2,2,1,1]^T | valid | 1 (`end()`, input errors only) | 0 | yes | rejected |
+| LL25 [[19,1,5]] [2,2,2,1,1,1]^T | valid | 1 (`end()`) | 0 | yes | rejected |
 
-- Du24: after three trivial rounds the flag circuit `FSE_f` is not 2-flag: two
-  faults that raise no flag can leave `IIIIIIIXIIIIIIZXZ`, of weight 3.
-- LL25: the final rounds use the unflagged `FSE_b`, which is not 1-flag, so
-  Condition 2 cannot hold (also with `--no-input-errors`); and the protocol
-  ends after one trivial round, where an input error of weight 1 and one fault
-  can leave a weight-2 error (input errors only).
+- Bha23 [[5,1,3]] and fig5: after a flag, the adaptive measurements leave
+  errors with different syndromes under one record (Condition 1), and a
+  decoding terminal cannot fall back on Condition 3. In [[5,1,3]], a false
+  alarm (`IIIII`) and the hook error `IIZXI` both read 0 on the circuits that
+  follow but differ on `IXZZX`.
+- Du24: after the trivial rounds, the flag circuit is not 2-flag: two faults
+  that raise no flag can leave `IIIIIIIXIIIIIIZXZ`, of weight 3.
+- LL25 distance 5: the protocol ends after one trivial round. An input error
+  of weight 1 and one fault can then leave a weight-2 error, which Condition 3
+  forbids (r + s ≤ t, weight ≤ s); in [[19,1,5]] [2,2,2,1,1,1]^T two faults
+  alone leave a weight-3 error.
+- CB18 [[35,1,5]] and [[45,1,5]] do not finish within 10000 s with input
+  errors.
+
+The full table, with times and memory for all four methods, is on the
+website's results page.
 
 ## Tests
 
