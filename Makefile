@@ -103,7 +103,7 @@ QASM_ALL = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.qasm' | sort)
 # parallel schedules make syndrome bits random -- so the check must fail on
 # them.
 FPDL_CIRCUIT_BAD = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' \
-                -path '*LL25_\[\[5,1,3\]\]_\[2,2\]*' | sort)
+                -path '*LL25_\[\[5,1,3\]\]_\[2,2\]*' ! -name '*fix*' | sort)
 FPDL_CIRCUIT  = $(filter-out $(FPDL_CIRCUIT_BAD),$(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' ! -path '*49,1,7*' | sort))
 FPDL_D3  = $(shell find protocols -mindepth 2 -maxdepth 2 -name '*.fpdl' -path '*,3]]*' | sort)
 

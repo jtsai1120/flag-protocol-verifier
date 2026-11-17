@@ -9,3 +9,4 @@ CR17_[[5,1,3]]	paths=5 records=117 circuits=16 min_t=-1 failures=0 cond=116/0/1 
 LL25_[[5,1,3]]_[1,1,1,1]^T	paths=2 records=117 circuits=40 min_t=-1 failures=0 cond=116/0/1 invalid=0
 LL25_[[5,1,3]]_[2,2]	paths=2 records=134 circuits=36 min_t=1 failures=4 [path 1 t=1 record=0001,01|0011] [path 1 t=1 record=0001,01|0111] [path 1 t=1 record=0011,10|1001] [path 1 t=1 record=0111,10|1111] cond=133/0/1 invalid=0
 LL25_[[5,1,3]]_[2,2]^T	paths=2 records=153 circuits=36 min_t=1 failures=1 [path 1 t=1 record=0001,01|0011] cond=152/0/1 invalid=0
+LL25_[[5,1,3]]_[2,2]^T_fix_2	paths=2 records=127 circuits=34 min_t=1 failures=4 [path 1 t=1 record=0100,01|1000] [path 1 t=1 record=1100,01|1000] [path 1 t=1 record=0101,10|0110] [path 1 t=1 record=0111,10|0110] cond=126/0/1 invalid=0
