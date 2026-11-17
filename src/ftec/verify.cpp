@@ -409,13 +409,10 @@ private:
         }
         PathCond2& path = cond2_[terminal.path_id];
         const Cond2 form = condition_2(record);
-        // The guards make the suffix repeat only if every record has it, and
-        // with the same w (a suffix whose length varies is not one the guards
-        // require).
-        if (!form.holds || (path.k >= 0 && path.k != form.k)) {
+        // The guards make the suffix repeat only if every record has it.
+        if (!form.holds) {
             path.every_record = false;
         } else if (path.every_record) {
-            path.k = form.k;
             if (path.flags_example.empty()) path.flags_example = record;
             for (const std::size_t e : form.suffix) {
                 const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
@@ -536,9 +533,14 @@ private:
         // w: the faults the record exposes. A flag is one; so is a change of
         // syndrome between consecutive unflagged full rounds, except that the
         // change right after another one may be the same fault seen twice.
+        // The input is a codeword up to the input error, so the first unflagged
+        // full round is compared with the trivial syndrome: a non-trivial one
+        // exposes an input error or a fault, either of which uses the budget.
+        Round baseline;
+        for (std::size_t g = 0; g < generators; ++g) baseline.syndrome[g] = false;
         int  w = 0;
         bool skip = false;
-        const Round* prev = nullptr;
+        const Round* prev = &baseline;
         for (const auto& r : rounds) {
             if (r.flagged) { ++w; prev = nullptr; skip = false; continue; }
             if (!full(r))  { prev = nullptr; skip = false; continue; }

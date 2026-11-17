@@ -99,7 +99,7 @@ protocol LL25_[[17,1,5]]_[2,2,2,1,1]^T:
         }
 
         3: {
-            if ((m2 == 0) and (m3 == 0) and (f3 == 0)) {
+            if ((m2 == m3) and (f3 == 0)) {
                 decode(mr[m1, f1, m2, f2, m3, f3]);
             }
             else {

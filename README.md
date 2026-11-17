@@ -214,14 +214,15 @@ must satisfy the condition its terminal calls for:
 | Terminal | Condition | Checked |
 |---|---|---|
 | `decode(...)` | 1 | Every error in E_m has the same ideal syndrome (no generator splits E_m) |
-| `decode(...)` | 2 | The path ends in t − w + 1 identical, unflagged, full rounds, where w counts the faults its records expose (flags, and changes of syndrome between consecutive unflagged rounds) |
+| `decode(...)` | 2 | The path ends in t − w + 1 identical, unflagged, full rounds, where w counts the faults its records expose (flags, and changes of syndrome between consecutive unflagged full rounds, the first one compared with the trivial syndrome) |
 | `end()` | 3 | Every error from s faults is within weight s of the code space |
 
 Condition 3 is the condition of a terminal that applies the trivial
 correction, so a decoding terminal is not settled by it, and an ending
 terminal is settled by nothing else. Condition 2 is a property of the path:
 every record that reaches the path must end in the same repeated suffix (the
-same w). A record that merely happens to repeat its last round does not count.
+suffix form). A record that merely happens to repeat its last round does not
+count.
 
 **Flag bugs** (Def. 3.10 (3)), counted in circuits. On every path with the form
 of Condition 2, the circuits of the repeated suffix must satisfy the
