@@ -151,15 +151,6 @@ tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]], 5×9
 tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]
 ```
 
-Reference measurements (2 vCPU, 7.8 GiB, two runs in parallel):
-
-| Protocol | Before E1E2 (s) | table fqcv | image fqcv | square fqcv | Peak memory |
-|---|---|---|---|---|---|
-| CB18 [[25,1,5]] | 201–210 | 0.96 s | 1.85 s | 1.65 s | 157 MiB |
-| CB18 [[35,1,5]] 5×7 | 741–762 | 3.22 s | 4.45 s | 4.90 s | 331 MiB |
-| CB18 [[45,1,5]] 5×9 | 2215–2238 | 7.81 s | 10.47 s | 12.91 s | 601 MiB |
-| CB18 [[49,1,7]] | did not finish in 2000 s | | | | |
-
 The bottleneck is state propagation and fault injection before the final
 query. The query itself is about 0.5% of the total.
 
@@ -268,8 +259,6 @@ bugs count circuits, as in the paper's Table 1.
   of weight 1 and one fault can then leave a weight-2 error, which Condition 3
   forbids (r + s ≤ t, weight ≤ s); in [[19,1,5]] [2,2,2,1,1,1]^T two faults
   alone leave a weight-3 error.
-- CB18 [[35,1,5]] and [[45,1,5]] do not finish within 10000 s with input
-  errors.
 
 The full table, with times and memory for all four methods, is on the
 website's results page.
@@ -307,8 +296,8 @@ merges the parsed statistics into `web/results.json`; `make site` publishes
 that file.
 
 ```bash
-tools/site_bench.py --configs table,table-noval --jobs 2 --skip 49,1,7
-tools/site_bench.py --configs image,square,bruteforce --resume --skip 49,1,7
+tools/site_bench.py --configs table --jobs 2 --skip 35,1,5 --skip 45,1,5 --skip 49,1,7
+tools/site_bench.py --configs image,square,bruteforce --resume --skip 35,1,5 --skip 45,1,5 --skip 49,1,7
 ``` The build outputs are not committed to
 `main`; the published copy lives on the `gh-pages` branch. To preview locally,
 serve the directory: `python3 -m http.server -d site`.

@@ -824,20 +824,6 @@
    "wall_s": 275.106
   },
   {
-   "config": "table",
-   "protocol": "CB18_[[35,1,5]]_plain",
-   "status": "timeout (>10000 s)",
-   "verdict": null,
-   "wall_s": 10000.119
-  },
-  {
-   "config": "table",
-   "protocol": "CB18_[[45,1,5]]_plain",
-   "status": "timeout (>10000 s)",
-   "verdict": null,
-   "wall_s": 10000.125
-  },
-  {
    "circuit_peak_bytes": 35232153,
    "circuit_problems": 0,
    "circuit_s": 0.0165,

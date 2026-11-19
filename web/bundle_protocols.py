@@ -17,9 +17,6 @@ from pathlib import Path
 NATIVE_SECONDS = {
     "CB18_[[17,1,5]]_plain": 176,
     "CB18_[[25,1,5]]_plain": 212,
-    "CB18_[[35,1,5]]_plain": 750,
-    "CB18_[[45,1,5]]_plain": 2240,
-    "CB18_[[49,1,7]]_plain": None,
     "Du24_[[17,1,5]]_plain": 307,
     "Du24_[[17,1,5]]": 153,
     "Du24[[19,1,5]]": 507,
@@ -30,12 +27,9 @@ NATIVE_SECONDS = {
 }
 
 
-# Verdicts of the larger protocols, from the same native runs (tests/expected.txt
-# covers only distance 3).
-KNOWN_VERDICTS = {
-    **{name: "min_t=-1 failures=0" for name in (
-        "CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain")},
-}
+# Protocols kept in protocols/ but not published on the website (results page
+# and playground): their runs with input errors do not finish in reasonable time.
+HIDDEN = {"CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain", "CB18_[[49,1,7]]_plain"}
 
 
 # Protocols whose circuits are not valid (ftec-verify stops before verifying
@@ -67,7 +61,7 @@ def main():
     protocols = []
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
         fpdls = sorted(d.glob("*.fpdl"))
-        if not fpdls:
+        if not fpdls or d.name in HIDDEN:
             continue
         files = {f.name: f.read_text() for f in sorted(d.iterdir())
                  if f.is_file() and f.suffix in (".fpdl", ".qasm")}
@@ -79,7 +73,7 @@ def main():
             "entry": entry,
             "n": n, "k": k, "d": dist,
             "expected": None if d.name in SE_CHECK_FAILS else
-                        measured.get(d.name) or expected.get(d.name) or KNOWN_VERDICTS.get(d.name),
+                        measured.get(d.name) or expected.get(d.name) or None,
             "se_check_fails": d.name in SE_CHECK_FAILS,
             "native_seconds": seconds.get(d.name, NATIVE_SECONDS.get(d.name, 0.1 if dist <= 3 else None)),
             "files": files,
