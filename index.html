@@ -279,17 +279,7 @@ h syn; m[1]=measure syn; f[0]=measure flag;</code></pre>
       <p><code>tools/gen_cb18_surface.py</code> writes the general <i>t</i>-fault-tolerant protocol of Chamberland &amp; Beverland, Section 3, for a rotated surface code. It produces both the FPDL file and the circuits, for a square <i>d</i>×<i>d</i> lattice or a rectangular <i>d</i>×<i>C</i> one. At <i>d</i>=5 its output is identical to the hand-written [[25,1,5]] protocol.</p>
 <pre><code>tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]] on a 5×9 lattice
 tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]</code></pre>
-      <p>Native run times on 2 vCPU, before the final query and for each method of it:</p>
-      <div class="table-scroll"><table>
-        <thead><tr><th>Protocol</th><th class="num">Before E1E2</th><th class="num">table</th><th class="num">image</th><th class="num">square</th><th class="num">Peak memory</th></tr></thead>
-        <tbody>
-          <tr><td>CB18 [[25,1,5]]</td><td class="num">201–210 s</td><td class="num">0.96 s</td><td class="num">1.85 s</td><td class="num">1.65 s</td><td class="num">157 MiB</td></tr>
-          <tr><td>CB18 [[35,1,5]], 5×7</td><td class="num">741–762 s</td><td class="num">3.22 s</td><td class="num">4.45 s</td><td class="num">4.90 s</td><td class="num">331 MiB</td></tr>
-          <tr><td>CB18 [[45,1,5]], 5×9</td><td class="num">2215–2238 s</td><td class="num">7.81 s</td><td class="num">10.47 s</td><td class="num">12.91 s</td><td class="num">601 MiB</td></tr>
-          <tr><td>CB18 [[49,1,7]]</td><td class="num">over 2000 s</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
-        </tbody>
-      </table></div>
-      <p>All three finished protocols are fault tolerant. The syndrome is packed into 64 bits, so codes with more than 65 qubits need that changed first.</p>
+      <p>The syndrome is packed into 64 bits, so codes with more than 65 qubits need that changed first.</p>
     </div>
   </div>
 </section>
