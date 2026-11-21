@@ -28,6 +28,7 @@
   <div class="results-head">
     <h1>Results</h1>
     <p class="lede-sm">Every bundled protocol, verified natively with input errors (<i>r</i> + <i>s</i> ≤ <i>t</i>) and all three checks: circuit validity, protocol validity and correctability. Rows are protocols; choose the columns below. Each run is its own process, so its peak memory is its own.</p>
+    <p class="meta-line">Machine: a KVM virtual machine with an Intel Xeon processor at 2.10 GHz, 2 vCPU (2 cores, 1 thread per core) and 7.8 GiB of memory, of which about 5.7 GiB is available to the runs. The verifier is single-threaded; two runs go in parallel, one per vCPU.</p>
     <p class="meta-line" id="meta-line">Loading results…</p>
   </div>
 
@@ -57,7 +58,7 @@
 </main>
 
 <footer class="site">
-  <span>Measured on 2 vCPU with two runs in parallel; times are wall-clock seconds inside the verifier.</span>
+  <span>Measured on an Intel Xeon at 2.10 GHz, 2 vCPU, 7.8 GiB, with two single-threaded runs in parallel; times are wall-clock seconds inside the verifier.</span>
   <a href="https://github.com/jtsai1120/flag-protocol-verifier/blob/main/tools/site_bench.py">How the data are collected</a>
 </footer>
 
