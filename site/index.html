@@ -277,8 +277,21 @@ h syn; m[1]=measure syn; f[0]=measure flag;</code></pre>
       </table></div>
       <h3>Generating larger CB18 protocols</h3>
       <p><code>tools/gen_cb18_surface.py</code> writes the general <i>t</i>-fault-tolerant protocol of Chamberland &amp; Beverland, Section 3, for a rotated surface code. It produces both the FPDL file and the circuits, for a square <i>d</i>×<i>d</i> lattice or a rectangular <i>d</i>×<i>C</i> one. At <i>d</i>=5 its output is identical to the hand-written [[25,1,5]] protocol.</p>
-<pre><code>tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]] on a 5×9 lattice
+<pre><code>tools/gen_cb18_surface.py 5 --cols 6 --out protocols   # [[30,1,5]] on a 5×6 lattice
+tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]] on a 5×9 lattice
 tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]</code></pre>
+      <p>Full check with input errors, <code>table</code> method, 2 vCPU with two runs in parallel:</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Protocol</th><th class="num">Records</th><th class="num">Time</th><th class="num">Peak memory</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td>CB18 [[25,1,5]], 5×5</td><td class="num">1,938,025</td><td class="num">332 s</td><td class="num">378 MiB</td><td>accepted</td></tr>
+          <tr><td>CB18 [[30,1,5]], 5×6</td><td class="num">2,997,132</td><td class="num">719 s</td><td class="num">496 MiB</td><td>accepted</td></tr>
+          <tr><td>CB18 [[35,1,5]], 5×7</td><td class="num">4,286,296</td><td class="num">1,368 s</td><td class="num">639 MiB</td><td>accepted</td></tr>
+          <tr><td>CB18 [[45,1,5]], 5×9</td><td class="num">7,554,651</td><td class="num">3,782 s</td><td class="num">1,126 MiB</td><td>accepted</td></tr>
+          <tr><td>CB18 [[49,1,7]], 7×7</td><td class="num">—</td><td class="num">killed after 6,791 s</td><td class="num">over 5.7 GiB</td><td>out of memory</td></tr>
+        </tbody>
+      </table></div>
+      <p>Condition 3 compares each residual set with every error within weight <i>s</i> of the code space. That diagram grows fast with the lattice’s width (2.8 million nodes for <i>s</i>&nbsp;=&nbsp;2 at 5×9), so the verifier takes the intersection before the difference and gives BuDDy a 2<sup>20</sup>-entry operation cache.</p>
       <p>The syndrome is packed into 64 bits, so codes with more than 65 qubits need that changed first.</p>
     </div>
   </div>

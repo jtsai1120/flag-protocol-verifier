@@ -147,12 +147,37 @@ the `FSE_f` / `FSE_b` circuits for a rotated surface code.
 
 ```bash
 tools/gen_cb18_surface.py 5 --out protocols            # [[25,1,5]]
+tools/gen_cb18_surface.py 5 --cols 6 --out protocols   # [[30,1,5]], 5×6
+tools/gen_cb18_surface.py 5 --cols 7 --out protocols   # [[35,1,5]], 5×7
 tools/gen_cb18_surface.py 5 --cols 9 --out protocols   # [[45,1,5]], 5×9
 tools/gen_cb18_surface.py 7 --out protocols            # [[49,1,7]]
 ```
 
+Full check (input errors, protocol validity, correctability), `table`
+method, 2 vCPU with two runs in parallel:
+
+| Protocol | Records | Time | Peak memory | Verdict |
+|---|---|---|---|---|
+| CB18 [[25,1,5]] 5×5 | 1,938,025 | 332 s | 378 MiB | accepted |
+| CB18 [[30,1,5]] 5×6 | 2,997,132 | 719 s | 496 MiB | accepted |
+| CB18 [[35,1,5]] 5×7 | 4,286,296 | 1,368 s | 639 MiB | accepted |
+| CB18 [[45,1,5]] 5×9 | 7,554,651 | 3,782 s | 1,126 MiB | accepted |
+| CB18 [[49,1,7]] 7×7 | — | killed after 6,791 s | over 5.7 GiB | out of memory |
+
 The bottleneck is state propagation and fault injection before the final
 query. The query itself is about 0.5% of the total.
+
+Condition 3 compares each residual set with the errors within weight s of
+the code space, (weight ≤ s) · S. That diagram grows quickly with the width
+of the lattice: for s = 2 it has 43,743 nodes at 5×5, 116,097 at 5×6,
+387,079 at 5×7 and 2,790,471 at 5×9. Two things keep it usable:
+
+- The check is `set − (set ∩ bound)` rather than `set − bound`. A plain
+  difference rebuilds the complement of the bound's subgraphs and, on
+  [[35,1,5]], did not finish in 18 hours.
+- BuDDy's operation cache has 2^20 entries instead of spbdd's default 2^16.
+  With 2^16, building the bound for [[45,1,5]] did not finish in 25 minutes;
+  with 2^20 it takes about 100 s.
 
 ## What is checked
 
@@ -241,7 +266,8 @@ bugs count circuits, as in the paper's Table 1.
 | Bha23 [[5,1,3]] | valid | 8 | 0 | yes | rejected |
 | Bha23 [[7,1,3]] fig5 | valid | 6 | 0 | yes | rejected |
 | Bha23 [[7,1,3]] fig6 | valid | 0 | 0 | yes | accepted |
-| CB18 [[17,1,5]], [[25,1,5]] | valid | 0 | 0 | yes | accepted |
+| CB18 [[17,1,5]], [[25,1,5]], [[30,1,5]], [[35,1,5]], [[45,1,5]] | valid | 0 | 0 | yes | accepted |
+| CB18 [[49,1,7]] | valid | — | — | — | out of memory |
 | Du24 [[17,1,5]] (parallel flags) | valid | 0 | 2 (`F6X_f`, `F6Z_f`) | no (t = 2) | rejected |
 | Du24 [[17,1,5]] plain | valid | 0 | 1 (`FSE_f`) | no (t = 2) | rejected |
 | Du24 [[19,1,5]] | valid | 0 | 1 (`FSE_f`) | yes | rejected |
