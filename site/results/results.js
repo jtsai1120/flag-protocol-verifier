@@ -10,7 +10,11 @@
     { id: 'square', label: 'square' },
     { id: 'bruteforce', label: 'bruteforce' },
   ];
-  const DEFAULT_COLS = ['circuit_s@table', 'validity_s@table', 'correctability_s@table'];
+  const DEFAULT_COLS = ['circuit@table', 'control@table', 'correctable@table', 'total_s@table'];
+  // Past this many columns the table keeps every cell on one line and scrolls
+  // sideways; up to it, headings and protocol names wrap so it fits.
+  const FIT_COLS = 6;
+  const STORE = 'results-cols-v2';
 
   const num = v => (typeof v === 'number' && isFinite(v) ? v : null);
   const secs = v => v === null ? '' : v === 0 ? '0 s' : v < 1 ? Number(v.toPrecision(2)) + ' s' : v < 10 ? v.toFixed(2) + ' s' : v < 1000 ? v.toFixed(1) + ' s' : Math.round(v) + ' s';
@@ -126,19 +130,29 @@
 
   function readCols() {
     const m = /cols=([^&]*)/.exec(location.hash);
-    if (m) return ordered(decodeURIComponent(m[1]).split(',').filter(valid));
-    try { const s = localStorage.getItem('results-cols'); if (s) return ordered(s.split(',').filter(valid)); } catch (_) {}
+    if (m) return [...new Set(decodeURIComponent(m[1]).split(',').filter(valid))];
+    try { const s = localStorage.getItem(STORE); if (s) return [...new Set(s.split(',').filter(valid))]; } catch (_) {}
     return DEFAULT_COLS.slice();
   }
-  function ordered(list) {
-    const rank = col => {
-      const [k, c] = col.split('@');
-      return [stageOf(k), METRICS.indexOf(METRIC[k]), CONFIGS.indexOf(CONFIG[c])];
-    };
-    return [...new Set(list)].sort((a, b) => {
-      const x = rank(a), y = rank(b);
-      return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
-    });
+  // The order of the checks: circuit validity, protocol validity,
+  // correctability, then whole-run measures; within that, the matrix order.
+  function rank(col) {
+    const [k, c] = col.split('@');
+    return [stageOf(k), METRICS.indexOf(METRIC[k]), CONFIGS.indexOf(CONFIG[c])];
+  }
+  function before(a, b) {
+    const x = rank(a), y = rank(b);
+    return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  }
+  // A ticked column goes where the order of the checks puts it, ahead of the
+  // first shown column that comes after it, so columns the reader has dragged
+  // keep their places.
+  function insert(list, col) {
+    if (list.includes(col)) return list;
+    const at = list.findIndex(x => before(col, x) < 0);
+    const out = list.slice();
+    out.splice(at < 0 ? out.length : at, 0, col);
+    return out;
   }
   function valid(col) {
     const [k, c] = col.split('@');
@@ -147,7 +161,7 @@
   function saveCols() {
     const value = cols.join(',');
     history.replaceState(null, '', '#cols=' + encodeURIComponent(value));
-    try { localStorage.setItem('results-cols', value); } catch (_) {}
+    try { localStorage.setItem(STORE, value); } catch (_) {}
   }
 
   function buildRows() {
@@ -188,7 +202,7 @@
           const box = el('input', { type: 'checkbox', checked: cols.includes(col) });
           box.setAttribute('aria-label', `${m.label}, ${c.label}`);
           box.addEventListener('change', () => {
-            cols = box.checked ? ordered([...cols, col]) : cols.filter(x => x !== col);
+            cols = box.checked ? insert(cols, col) : cols.filter(x => x !== col);
             saveCols(); renderTable();
           });
           td.append(box);
@@ -211,7 +225,7 @@
       return { text: 'timeout', cls: 'v-warn', title: run.status, sort: Infinity };
     }
     if (run.status && run.status !== 'ok' && value === null) {
-      return { text: run.status, cls: 'v-bad', title: run.status, sort: null };
+      return { text: run.status.replace(/\s*\(.*$/, ''), cls: 'v-bad', title: run.status, sort: null };
     }
     if (value === null) return { text: '—', cls: 'v-none', title: 'not reported', sort: null };
     if (m.show) {
@@ -225,25 +239,39 @@
   function renderTable() {
     const t = $('results');
     t.textContent = '';
-    const head = el('tr', {},
-      el('th', { scope: 'col' }, sortButton('Protocol', '', null)),
-      el('th', { scope: 'col' }, sortButton('Code', '', 'code')));
-    for (const col of cols) {
+    t.classList.toggle('fit', cols.length <= FIT_COLS);
+    const head = el('tr', {}, el('th', { scope: 'col' }, sortButton('Protocol', '', null)));
+    cols.forEach((col, i) => {
       const [k, c] = col.split('@');
       const th = el('th', { scope: 'col', className: METRIC[k].kind === 'verdict' ? '' : 'num' });
-      th.append(sortButton(METRIC[k].label, CONFIG[c].label, col));
+      th.dataset.col = col;
+      const grip = el('button', { className: 'grip', type: 'button', textContent: '⠿',
+        title: 'Drag to move this column (or focus it and use the arrow keys)' });
+      grip.setAttribute('aria-label', `Move ${METRIC[k].label}, ${CONFIG[c].label}; column ${i + 1} of ${cols.length}`);
+      grip.addEventListener('pointerdown', e => startDrag(e, col, th));
+      grip.addEventListener('keydown', e => {
+        const step = e.key === 'ArrowLeft' ? -1 : e.key === 'ArrowRight' ? 1 : 0;
+        const to = i + step;
+        if (!step || to < 0 || to >= cols.length) return;
+        e.preventDefault();
+        moveCol(col, to);
+        const again = $('results').querySelector(`th[data-col="${CSS.escape(col)}"] .grip`);
+        if (again) again.focus();
+      });
+      const tools = el('div', { className: 'tools' }, grip);
+      th.append(tools, sortButton(METRIC[k].label, CONFIG[c].label, col));
       const rm = el('button', { className: 'remove', type: 'button', textContent: '×', title: 'Remove column' });
       rm.setAttribute('aria-label', `Remove ${METRIC[k].label}, ${CONFIG[c].label}`);
       rm.addEventListener('click', () => { cols = cols.filter(x => x !== col); saveCols(); renderMatrix(); renderTable(); });
-      th.append(rm);
+      tools.append(rm);
       head.append(th);
-    }
+    });
     t.append(el('thead', {}, head));
 
     const body = el('tbody');
     let list = rows.slice();
     if (sort && sort.col) {
-      const key = r => sort.col === 'code' ? r.n * 1000 + r.d : cell(r, sort.col).sort;
+      const key = r => cell(r, sort.col).sort;
       list.sort((a, b) => {
         const x = key(a), y = key(b);
         if (x === null && y === null) return 0;
@@ -256,9 +284,9 @@
     for (const r of list) {
       if (!sort && r.d !== dist) {
         dist = r.d;
-        body.append(el('tr', { className: 'dist' }, el('th', { colSpan: cols.length + 2, textContent: `Distance ${r.d}` })));
+        body.append(el('tr', { className: 'dist' }, el('th', { colSpan: cols.length + 1, textContent: `Distance ${r.d}` })));
       }
-      const tr = el('tr', {}, el('td', { textContent: r.name.replace(/_/g, '_\u200b'), title: r.note || '' }), el('td', { className: 'code', textContent: `[[${r.n},${r.k},${r.d}]]` }));
+      const tr = el('tr', {}, el('td', { textContent: r.name.replace(/_/g, '_\u200b'), title: r.note || '' }));
       if (r.note && Object.keys(r.runs).length === 0) {
         tr.append(el('td', { colSpan: Math.max(cols.length, 1), className: 'v-none', textContent: r.note }));
       } else {
@@ -275,6 +303,68 @@
     t.append(body);
     renderDefs();
     $('picker-count').textContent = `${cols.length} shown`;
+  }
+
+  function moveCol(col, to) {
+    const list = cols.filter(x => x !== col);
+    list.splice(to, 0, col);
+    cols = list;
+    saveCols(); renderTable();
+  }
+
+  // Dragging a column by its grip: pointer events, so mouse, pen and touch
+  // all work. The drop point is the gap between column centres nearest the
+  // pointer; near the edges of the scroll box it scrolls along.
+  function startDrag(e, col, th) {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    const table = $('results');
+    const box = table.parentElement;
+    const grip = e.currentTarget;
+    grip.setPointerCapture(e.pointerId);
+    const from = cols.indexOf(col);
+    const index = col => cols.indexOf(col) + 2;   // nth-child of the column's cells
+    const mark = (selector, on) => table.querySelectorAll(selector).forEach(x => x.classList.toggle('dragging', on));
+    const cells = `tr > :nth-child(${index(col)}):not([colspan])`;
+    mark(cells, true);
+    let target = from;
+    let scrollTimer = null;
+    let lastX = e.clientX;
+
+    const heads = () => [...table.querySelectorAll('thead th[data-col]')];
+    const place = x => {
+      const others = heads().filter(h => h !== th);
+      let to = others.length;
+      for (let i = 0; i < others.length; i++) {
+        const r = others[i].getBoundingClientRect();
+        if (x < r.left + r.width / 2) { to = i; break; }
+      }
+      target = to;
+      heads().forEach(h => h.classList.remove('drop-before', 'drop-after'));
+      if (target === from) return;
+      if (target < others.length) others[target].classList.add('drop-before');
+      else if (others.length) others[others.length - 1].classList.add('drop-after');
+    };
+    const edgeScroll = () => {
+      const r = box.getBoundingClientRect();
+      const edge = 48;
+      const dx = lastX < r.left + edge ? -12 : lastX > r.right - edge ? 12 : 0;
+      if (dx && box.scrollWidth > box.clientWidth) { box.scrollLeft += dx; place(lastX); }
+    };
+    const move = ev => { lastX = ev.clientX; place(ev.clientX); };
+    const end = ev => {
+      clearInterval(scrollTimer);
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', end);
+      grip.removeEventListener('pointercancel', end);
+      mark(cells, false);
+      heads().forEach(h => h.classList.remove('drop-before', 'drop-after'));
+      if (ev.type === 'pointerup' && target !== from) moveCol(col, target);
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+    scrollTimer = setInterval(edgeScroll, 30);
   }
 
   function sortButton(label, sub, col) {
