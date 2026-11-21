@@ -256,7 +256,7 @@ public:
         facts.weight_bounded = true;
         for (std::size_t i = 0; i < state.size(); ++i) {
             const int s = levels_[i].second;
-            const pset outside = state[i] - within(s);
+            const pset outside = outside_of(state[i], within(s));
             if (outside.is_empty()) continue;
             facts.weight_bounded = false;
             facts.weight_detail = on_data(outside.any_element().value_or("")) + " (input weight " +
@@ -300,7 +300,7 @@ public:
             for (int s = 1; s <= k && !problem; ++s) {
                 pset level = branch.by_t[static_cast<std::size_t>(s)];
                 level.reset(layout.ancillas);
-                const pset outside = level - within(s);
+                const pset outside = outside_of(level, within(s));
                 if (outside.is_empty()) continue;
                 problem = std::to_string(s) + " fault(s) raise no flag but leave " +
                           on_data(outside.any_element().value_or("")) +
@@ -485,6 +485,16 @@ private:
     std::string on_data(const std::string& pauli) const {
         return pauli.substr(0, static_cast<std::size_t>(data_qubits_));
     }
+
+    // The errors of `set` that are not in `bound`. Written as set - (set & bound)
+    // rather than set - bound: bound (within(s)) is far larger than set, and a
+    // plain difference has to build the complement of bound's subgraphs every
+    // time set reaches its 1-leaf. With BuDDy's 2^16-entry operation cache
+    // that is recomputed over and over: on CB18 [[35,1,5]] the first Cond 3
+    // check (4,395 nodes minus 387,079) did not finish in 18 hours. The
+    // intersection only walks set, and the difference is then between two
+    // small diagrams.
+    static pset outside_of(const pset& set, const pset& bound) { return set - (set & bound); }
 
     // Errors within weight s of the code space: (weight <= s on the data) * S.
     const pset& within(int s) {
