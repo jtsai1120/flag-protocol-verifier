@@ -165,6 +165,12 @@ public:
         // enough to time.
         spbdd::config config;
         config.dynamic_reordering = false;
+        // BuDDy's operation cache defaults to 2^16 entries in spbdd. That is
+        // far too small once the Cond 3 bound within(s) grows past a few
+        // hundred thousand nodes: building within(2) for CB18 [[45,1,5]]
+        // (2.8 million nodes) did not finish in 25 minutes with 2^16 entries,
+        // and takes 103 s with 2^20 (77 s with 2^22, at twice the memory).
+        config.cache_size = 1 << 20;
         ctx_.emplace(data_qubits_, 0, config);
         allocated_ = data_qubits_;
 

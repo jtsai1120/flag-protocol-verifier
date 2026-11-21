@@ -27,9 +27,6 @@ NATIVE_SECONDS = {
 }
 
 
-# Protocols kept in protocols/ but not published on the website (results page
-# and playground): their runs with input errors do not finish in reasonable time.
-HIDDEN = {"CB18_[[35,1,5]]_plain", "CB18_[[45,1,5]]_plain", "CB18_[[49,1,7]]_plain"}
 
 
 # Protocols whose circuits are not valid (ftec-verify stops before verifying
@@ -61,7 +58,7 @@ def main():
     protocols = []
     for d in sorted(p for p in root.iterdir() if p.is_dir()):
         fpdls = sorted(d.glob("*.fpdl"))
-        if not fpdls or d.name in HIDDEN:
+        if not fpdls:
             continue
         files = {f.name: f.read_text() for f in sorted(d.iterdir())
                  if f.is_file() and f.suffix in (".fpdl", ".qasm")}
