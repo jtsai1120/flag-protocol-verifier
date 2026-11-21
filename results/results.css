@@ -63,11 +63,35 @@ table.results thead th button.remove:hover { color: var(--x); }
 table.results tbody td:first-child { position: sticky; left: 0; background: var(--paper); z-index: 1; }
 table.results tbody tr:hover td:first-child { background: var(--code-bg); }
 table.results thead th:first-child { left: 0; z-index: 2; }
-@media (max-width: 720px) {
-  table.results td.code, table.results thead th:nth-child(2) { display: none; }
-}
 
 /* On phones, wrap long protocol names so the data columns stay in view. */
 @media (max-width: 720px) {
   table.results tbody td:first-child { white-space: normal; overflow-wrap: break-word; min-width: 7.5rem; max-width: 9.5rem; }
+}
+
+/* Up to six columns the table fits its box: headings and protocol names wrap
+   instead of scrolling. Past six, every cell stays on one line and the box
+   scrolls sideways. */
+table.results.fit { width: 100%; }
+table.results.fit thead th, table.results.fit tbody td { white-space: normal; }
+table.results.fit tbody td.num { white-space: nowrap; }
+table.results.fit tbody td:first-child { white-space: normal; overflow-wrap: break-word; min-width: 9rem; }
+
+/* Column grip: drag to move a column. */
+table.results thead th button.grip { all: unset; cursor: grab; touch-action: none; color: var(--muted); font-size: 0.85rem; padding: 0 0.35rem 0 0; vertical-align: top; user-select: none; }
+table.results thead th button.grip:hover { color: var(--ink); }
+table.results thead th button.grip:focus-visible { outline: 2px solid var(--z); outline-offset: 2px; }
+table.results thead th button.grip:active { cursor: grabbing; }
+table.results .dragging { background: var(--code-bg); opacity: 0.75; }
+table.results thead th.drop-before { box-shadow: inset 3px 0 0 var(--z); }
+table.results thead th.drop-after { box-shadow: inset -3px 0 0 var(--z); }
+
+/* Grip and remove button sit on a small row above the heading. */
+table.results thead th .tools { display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; margin-bottom: 0.15rem; }
+table.results thead th .tools button.remove { margin-left: 0; }
+@media (max-width: 720px) {
+  table.results { font-size: 0.78rem; }
+  table.results th, table.results td { padding: 0.35rem 0.3rem; }
+  table.results td:first-child { font-size: 0.72rem; }
+  table.results.fit tbody td:first-child { min-width: 0; width: 6.5rem; max-width: 6.5rem; word-break: break-all; }
 }
