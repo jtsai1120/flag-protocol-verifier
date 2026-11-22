@@ -24,11 +24,13 @@
 //     and never touches a qubit while that qubit is measured or reset: the
 //     circuit leaves the encoded state alone.
 //
-// Signs. The verifier records every outcome as a flip relative to the
-// error-free outcome, so a measurement that deterministically reads 1 (it
-// observes -s), or a logical operator that comes out as -L, changes nothing it
-// verifies: the classical control only has to XOR a known constant. Those are
-// reported as warnings rather than errors.
+// Signs. A measurement that deterministically reads 1 (it observes -s), or a
+// logical operator that comes out as -L, is a warning rather than an error.
+// A syndrome row may declare its sign in g: as -[...]: the bit then reads 1
+// without errors by design, and the check warns only when the declaration and
+// the circuit disagree. The verifier records outcomes as flips; branch guards
+// see a -[...] bit as read (flip XOR 1), validity and correctability use the
+// flips.
 //
 // A flag measurement that observes a stabilizer other than the identity is
 // valid here; it does violate part (2) of the flag condition, which protocol
