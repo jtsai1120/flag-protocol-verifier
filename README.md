@@ -204,10 +204,12 @@ measurement that deterministically reads 1, or a logical operator that comes
 out with a minus sign, is reported as a warning only. A syndrome bit that
 reads 1 by design is declared with a minus sign in `g:`, as `-[...]`: the bit
 measures minus the code's stabilizer with those letters, and the warning then
-goes away (a `-[...]` row whose bit reads 0 is warned about instead).
+goes away (a `-[...]` row whose bit reads 0 is warned about instead). The
+protocol's branch guards then see that bit as the circuit reads it, 1 when
+nothing happened; validity and correctability still work with the flips.
 Bha23 [[7,1,3]] fig6 does this for its three weight-6 flag circuits: with
 `Y = iXZ`, IIIXXXX · IZZIIZZ = −IZZXXYY, so a circuit that measures +IZZXXYY
-reads 1. Circuits that fail are
+reads 1, and the protocol starts with `s = 1` and stops on `s != 1`. Circuits that fail are
 reported with the line and what they measure instead, and the protocol is
 rejected without being verified; `--skip-circuit-check` verifies them anyway.
 

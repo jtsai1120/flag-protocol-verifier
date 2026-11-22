@@ -43,7 +43,7 @@ std::string record_text(const std::vector<RecordEntry>& record) {
     std::string out;
     for (std::size_t i = 0; i < record.size(); ++i) {
         if (i != 0) out += '|';
-        for (const bool bit : record[i].outcome.syndrome) out += bit ? '1' : '0';
+        for (const bool bit : record[i].read_syndrome()) out += bit ? '1' : '0';
         if (!record[i].outcome.flag.empty()) {
             out += ',';
             for (const bool bit : record[i].outcome.flag) out += bit ? '1' : '0';
@@ -205,8 +205,10 @@ private:
     std::optional<Value> resolve(std::size_t event, bool is_flag,
                                  std::optional<std::size_t> bit) const {
         if (event == 0 || event > record_.size()) return std::nullopt;
-        const Outcome& outcome = record_[event - 1].outcome;
-        const std::vector<bool>& bits = is_flag ? outcome.flag : outcome.syndrome;
+        // Guards see the bits as the circuit reads them, so a -[...] row in
+        // g: reads 1 when nothing happened.
+        const RecordEntry& entry = record_[event - 1];
+        const std::vector<bool> bits = is_flag ? entry.outcome.flag : entry.read_syndrome();
         Value value;
         if (bit) {
             if (*bit >= bits.size()) return std::nullopt;
@@ -329,7 +331,7 @@ public:
         // stay apart. Merging happens inside a state instead, between fault
         // counts and between branches of a circuit whose measured bits agree.
         for (auto& [outcome, next_state] : outcomes) {
-            record.push_back(RecordEntry{node, current.circuit.se_name, outcome});
+            record.push_back(RecordEntry{node, current.circuit.se_name, outcome, current.circuit.negated});
             const auto child = route(node, record);
             if (child) {
                 if (!visit(*child, next_state, record)) {

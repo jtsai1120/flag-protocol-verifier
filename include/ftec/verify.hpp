@@ -15,7 +15,21 @@ namespace ftec {
 struct RecordEntry {
     std::size_t node = 0;      // the Se node in the dag
     std::string se_name;
-    Outcome     outcome;
+    Outcome     outcome;       // flips: what errors did to each bit
+    // The SE's g: rows written -[...]: those bits read 1 without errors.
+    std::vector<bool> negated;
+
+    // Syndrome bit i as the circuit reads it: the flip, XOR 1 for a -[...]
+    // row. Branch guards and printed records use these; everything that
+    // compares errors (validity, correctability) uses the flips.
+    [[nodiscard]] bool read_bit(std::size_t i) const {
+        return outcome.syndrome[i] != (i < negated.size() && negated[i]);
+    }
+    [[nodiscard]] std::vector<bool> read_syndrome() const {
+        std::vector<bool> out(outcome.syndrome.size());
+        for (std::size_t i = 0; i < out.size(); ++i) out[i] = read_bit(i);
+        return out;
+    }
 };
 
 // A path the code does not protect.

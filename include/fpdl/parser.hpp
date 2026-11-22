@@ -106,8 +106,9 @@ struct SEEvent {
     // One entry per `measures` row: true when the row is written with a minus
     // sign, `-[...]`. The sign is relative to the code: `-P` says the bit
     // measures minus the code's stabilizer with letters P, so it reads 1
-    // without errors. Only the circuit check reads it; the verifier works with
-    // the flips that errors cause, which the sign does not change.
+    // without errors. The circuit check compares it with the circuit, and the
+    // verifier's branch guards see such a bit as read (1 when nothing
+    // happened); validity and correctability work with the flips.
     std::vector<bool> negated;
 };
 

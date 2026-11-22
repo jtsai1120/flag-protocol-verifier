@@ -109,10 +109,14 @@ g: [-[Z1, Z6], [Z2, Z3, Z7, Z8]]            # sparse; only the first row is nega
 The sign is relative to the code: `-P` declares that the syndrome bit measures
 minus the code's stabilizer with letters `P`, so it reads 1 when there are no
 errors, by design. Without a sign, the bit must read 0. The circuit check
-compares the two and warns on a mismatch either way. The sign does not change
-the verification itself: outcomes are recorded as the flips that errors cause,
-which a sign does not affect. Only an SE's `g` can carry signs; the `code`
-generators cannot.
+compares the two and warns on a mismatch either way.
+
+The protocol sees the bit as the circuit reads it: a `-[...]` bit is 1 when
+nothing happened and 0 when an error flips it, so `af`, `tc` and `tp` must
+treat 1 as the trivial value for that bit (for example `bit s = 1;` and
+`tc: 1: (s != 1) or (f != 0)`). Validity and correctability compare what
+errors did, so they work with the flips and are not affected by the sign.
+Only an SE's `g` can carry signs; the `code` generators cannot.
 
 For example, in the `[[7,1,3]]` code with generators `IIIXXXX` and `IZZIIZZ`,
 their product is `-IZZXXYY` (with `Y = iXZ`). A circuit that measures
