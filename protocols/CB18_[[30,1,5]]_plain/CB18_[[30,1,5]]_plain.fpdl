@@ -154,7 +154,7 @@ protocol CB18_[[30,1,5]]_plain:
             s_prev = s;
         }
 
-    tp:
+    ta:
         1: { decode(mr[s_prev]); }
         2: {
             bit[29] s = ⊥;

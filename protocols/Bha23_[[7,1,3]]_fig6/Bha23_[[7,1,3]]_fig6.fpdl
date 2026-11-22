@@ -72,7 +72,7 @@ protocol Bha23_[[7,1,3]]_fig6:
             n += 1;
         }
 
-    tp:
+    ta:
         1: {
             bit[6] sb;
             (sb,) = FSE_b();

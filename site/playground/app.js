@@ -409,7 +409,7 @@
             (s,) = FSE_b();
         }
 
-    tp:
+    ta:
         1: { decode(mr[s]); }
 `;
   const QASM_TEMPLATE = `OPENQASM 3.0;

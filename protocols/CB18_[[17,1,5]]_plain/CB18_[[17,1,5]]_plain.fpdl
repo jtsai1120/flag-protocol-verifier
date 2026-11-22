@@ -120,7 +120,7 @@ protocol CB18_[[17,1,5]]_plain:
             s_prev = s;
         }
 
-    tp:
+    ta:
         1: { 
             decode(mr[s_prev]);
         }

@@ -10,7 +10,7 @@ protocol <protocol_name>:
     gvar: ...
     tc:   ...
     af:   ...
-    tp:   ...
+    ta:   ...
 ```
 
 This document uses **parser** as shorthand for the complete FPDL front end. In
@@ -29,7 +29,7 @@ An FPDL protocol is valid only if the parser can establish all of the following:
    many adaptive-flow rounds, and no internal loop can execute forever within a
    round. All possible syndrome and flag outcomes of an SE invocation must be
    considered when checking this property.
-5. Every terminating-policy path terminates after finitely many steps.
+5. Every terminal-action path terminates after finitely many steps.
 6. No possible execution path reaches a runtime assertion error, including
    counter underflow, out-of-range indexing, invalid null use, vector-length
    mismatch, or a nonexhaustive `switch`.
@@ -39,7 +39,7 @@ An FPDL protocol is valid only if the parser can establish all of the following:
 The parser performs these checks with bounded model checking (BMC). Every parser
 invocation must supply a positive integer bound `B`; there is no default bound.
 `B` is the maximum number of transition steps in a complete trace from the
-initial state through termination of its selected `tp` entry. Executing one
+initial state through termination of its selected `ta` entry. Executing one
 statement, evaluating one control-flow guard, or taking one control-flow edge is
 one transition; an atomic SE tuple assignment is one transition.
 
@@ -112,7 +112,7 @@ errors, by design. Without a sign, the bit must read 0. The circuit check
 compares the two and warns on a mismatch either way.
 
 The protocol sees the bit as the circuit reads it: a `-[...]` bit is 1 when
-nothing happened and 0 when an error flips it, so `af`, `tc` and `tp` must
+nothing happened and 0 when an error flips it, so `af`, `tc` and `ta` must
 treat 1 as the trivial value for that bit (for example `bit s = 1;` and
 `tc: 1: (s != 1) or (f != 0)`). Validity and correctability compare what
 errors did, so they work with the flips and are not affected by the sign.
@@ -133,7 +133,7 @@ backend to find the syndrome and flag records. Declaring the classical
 registers as well would let the two disagree, with the syndrome read silently
 off the flag register.
 
-An SE is a black-boxed, atomic operation when called from `af` or `tp`. Every SE
+An SE is a black-boxed, atomic operation when called from `af` or `ta`. Every SE
 invocation returns a tuple:
 
 ```fpdl
@@ -317,13 +317,13 @@ tc ≡ tc[1] or tc[2] or ... or tc[N]
 
 The parser must prove that the individual terminal conditions are mutually
 exclusive over all reachable states. Therefore, whenever `tc` is true, exactly
-one `tc[i]` is true and its corresponding `tp[i]` is selected.
+one `tc[i]` is true and its corresponding `ta[i]` is selected.
 
-Every `tc[i]` must have exactly one corresponding `tp[i]`, and a `tp` entry may
+Every `tc[i]` must have exactly one corresponding `ta[i]`, and a `ta` entry may
 not exist without a corresponding terminal condition.
 
 A terminal condition may reference only global variables declared in `gvar`,
-literals, and pure expressions. It may not reference an `af` or `tp` local
+literals, and pure expressions. It may not reference an `af` or `ta` local
 variable, invoke an SE, mutate state, or perform any other side effect.
 
 ### Boolean expressions
@@ -356,7 +356,7 @@ af:
 The outer `while (!tc)` is the adaptive-flow loop. One entry into its body is
 one adaptive-flow round. The aggregate `tc` predicate is checked before every
 round. If it is true, the body is not entered and the unique matching
-terminating policy runs.
+terminal action runs.
 
 Use `check();` to request the same test in the middle of a round:
 
@@ -367,7 +367,7 @@ check();
 ```
 
 If `tc` is false, execution continues with the next statement. If it is true,
-the adaptive flow terminates immediately and the unique matching `tp` entry
+the adaptive flow terminates immediately and the unique matching `ta` entry
 runs. The parser includes every explicit `check()` point in its termination and
 reachability analysis.
 
@@ -428,17 +428,17 @@ binds more tightly than `or`.
 
 ---
 
-## `tp` — terminating policy
+## `ta` — terminal action
 
 ```fpdl
-tp:
+ta:
     <tc_num>: { <terminate_execution>; }
 ```
 
-A terminating policy may perform declarations, SE tuple assignments,
+A terminal action may perform declarations, SE tuple assignments,
 assignments, structured-record operations, and control flow. Every possible
-terminating-policy path must itself finish within the BMC bound. `check()` is
-valid only in `af` and is forbidden in `tp`.
+terminal-action path must itself finish within the BMC bound. `check()` is
+valid only in `af` and is forbidden in `ta`.
 
 The explicit terminal actions are:
 
@@ -447,9 +447,9 @@ The explicit terminal actions are:
 - `end();` — terminate without decoding.
 
 Both are non-returning primitives. No reachable statement may follow either
-one, and each `tp` path may execute at most one of them.
+one, and each `ta` path may execute at most one of them.
 
-If control reaches the closing brace of a terminating policy without executing
+If control reaches the closing brace of a terminal action without executing
 `decode()` or `end()`, FPDL implicitly executes `end()`. Thus an empty policy is
 equivalent to:
 

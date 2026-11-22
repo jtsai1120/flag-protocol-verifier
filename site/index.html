@@ -104,7 +104,7 @@ af:
         (s,) = FSE_b();
     }
 
-tp:
+ta:
     1: { decode(mr[s]); }</code></pre>
       <p>One round without flags is not fault tolerant, and the verifier says why:</p>
 <pre><code>$ ./build/ftec-verify protocol.fpdl
@@ -226,7 +226,7 @@ cd flag-protocol-verifier</code></pre>
           <tr><td><code>gvar</code></td><td>Global variables: counters, bit vectors that start as <code>⊥</code>, and measurement records <code>mr</code>.</td></tr>
           <tr><td><code>tc</code></td><td>Numbered terminal conditions. They must be mutually exclusive.</td></tr>
           <tr><td><code>af</code></td><td>The adaptive flow: rounds of extraction calls such as <code>(s, f) = FSE_f();</code> and the updates between them.</td></tr>
-          <tr><td><code>tp</code></td><td>One terminating policy per terminal condition, ending in <code>decode(...)</code> or <code>end()</code>.</td></tr>
+          <tr><td><code>ta</code></td><td>One terminal action per terminal condition, ending in <code>decode(...)</code> or <code>end()</code>.</td></tr>
         </tbody>
       </table></div>
 <pre><code>protocol CB18_[[25,1,5]]_plain:

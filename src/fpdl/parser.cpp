@@ -258,7 +258,7 @@ public:
         sections.push_back({"gvar", parse_gvar()});
         sections.push_back({"tc", parse_tc()});
         sections.push_back({"af", parse_af()});
-        sections.push_back({"tp", parse_tp()});
+        sections.push_back({"ta", parse_ta()});
         expect_kind(TokenKind::End, "end of file");
 
         if (tc_ids_ != tp_ids_) {
@@ -647,8 +647,8 @@ private:
         return make("AdaptiveFlow", "", {{"body", body}}, start);
     }
 
-    NodeId parse_tp() {
-        const auto start = expect("tp").location;
+    NodeId parse_ta() {
+        const auto start = expect("ta").location;
         expect(":");
         std::vector<NodeId> entries;
         in_tp_ = true;
@@ -752,13 +752,13 @@ private:
         }
         if (check("check")) {
             const auto location = advance().location;
-            if (in_tp_) fail_at(location, "check() is forbidden in a terminating policy");
+            if (in_tp_) fail_at(location, "check() is forbidden in a terminal action");
             expect("("); expect(")"); expect(";");
             return make("CheckTerminalConditions", "", {}, location);
         }
         if (check("decode")) {
             const auto location = advance().location;
-            if (!in_tp_) fail_at(location, "decode() is valid only in a terminating policy");
+            if (!in_tp_) fail_at(location, "decode() is valid only in a terminal action");
             expect("(");
             const auto record = parse_expression();
             expect(")"); expect(";");
@@ -766,7 +766,7 @@ private:
         }
         if (check("end")) {
             const auto location = advance().location;
-            if (!in_tp_) fail_at(location, "end() is valid only in a terminating policy");
+            if (!in_tp_) fail_at(location, "end() is valid only in a terminal action");
             expect("("); expect(")"); expect(";");
             return make("End", "", {}, location);
         }
@@ -2055,11 +2055,11 @@ private:
                 const int id = std::stoi(syntax(terminal_conditions_[selected]).value);
                 terminal.path.terminal_condition = id;
                 terminal.path.terminating_policy = id;
-                terminal.phase = "tp";
+                terminal.phase = "ta";
                 terminal.invocation = 0;
                 const auto policy = policies_.find(id);
                 if (policy == policies_.end()) {
-                    set_error(terminal, "missing terminating policy " + std::to_string(id));
+                    set_error(terminal, "missing terminal action " + std::to_string(id));
                     result.push_back(std::move(terminal));
                     continue;
                 }
@@ -2073,7 +2073,7 @@ private:
                         }
                     } else if (policy_state.signal == Signal::Break ||
                                policy_state.signal == Signal::Continue) {
-                        set_error(policy_state, "break/continue escaped a terminating policy");
+                        set_error(policy_state, "break/continue escaped a terminal action");
                     }
                     result.push_back(std::move(policy_state));
                 }
@@ -2167,9 +2167,9 @@ private:
         const auto globals = required_edge(root, "gvar");
         const auto tc_section = required_edge(root, "tc");
         const auto af = required_edge(root, "af");
-        const auto tp_section = required_edge(root, "tp");
+        const auto ta_section = required_edge(root, "ta");
         terminal_conditions_ = children(tc_section);
-        for (const auto policy : children(tp_section)) {
+        for (const auto policy : children(ta_section)) {
             policies_[std::stoi(syntax(policy).value)] = required_edge(policy, "body");
         }
 
@@ -2295,7 +2295,7 @@ std::string ParseResult::to_json() const {
             << ", \"bound_exceeded\": " << (path.bound_exceeded ? "true" : "false")
             << ", \"tc\": ";
         if (path.terminal_condition) out << *path.terminal_condition; else out << "null";
-        out << ", \"tp\": ";
+        out << ", \"ta\": ";
         if (path.terminating_policy) out << *path.terminating_policy; else out << "null";
         out << ", \"terminal_action\": \"" << json_escape(path.terminal_action) << "\"";
         out << ", \"decode_record\": ";

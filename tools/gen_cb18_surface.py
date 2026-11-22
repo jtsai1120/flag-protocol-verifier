@@ -185,7 +185,7 @@ def fpdl(n, d, name, checks):
             s_prev = s;
         }}
 
-    tp:
+    ta:
 {tp_txt}
 """
 

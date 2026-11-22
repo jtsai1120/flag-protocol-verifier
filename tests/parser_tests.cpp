@@ -156,7 +156,7 @@ int main(int argc, char** argv) {
     }
 
     if (!rejects("protocol bad: code: [[1,1,1]] [[I]] se: gvar: "
-                 "bit x = 0 tc: 1: true af: while(!tc) {} tp: 1: { end(); }")) {
+                 "bit x = 0 tc: 1: true af: while(!tc) {} ta: 1: { end(); }")) {
         std::cerr << "invalid declaration without semicolon was accepted\n";
         return 1;
     }
@@ -166,20 +166,20 @@ int main(int argc, char** argv) {
         "g { file: \"x.qasm\" qd: q qm: q g: [[I]] } ";
     if (!rejects(prefix +
                  "gvar: bit s = 0; tc: 1: true "
-                 "af: while(!tc) { (s) = g(); } tp: 1: { end(); }")) {
+                 "af: while(!tc) { (s) = g(); } ta: 1: { end(); }")) {
         std::cerr << "old singleton tuple syntax was accepted\n";
         return 1;
     }
 
     if (!rejects("protocol bad: code: [[1,1,1]] [[I]] se: gvar: bit x = 0; "
-                 "tc: 1: local == 0 af: while(!tc) {} tp: 1: { end(); }")) {
+                 "tc: 1: local == 0 af: while(!tc) {} ta: 1: { end(); }")) {
         std::cerr << "terminal condition referencing a nonglobal was accepted\n";
         return 1;
     }
 
     if (!rejects("protocol bad: code: [[1,1,1]] [[I]] se: gvar: bit x = 0; "
-                 "tc: 1: true af: while(!tc) {} tp: 1: { check(); }")) {
-        std::cerr << "check() in terminating policy was accepted\n";
+                 "tc: 1: true af: while(!tc) {} ta: 1: { check(); }")) {
+        std::cerr << "check() in terminal action was accepted\n";
         return 1;
     }
 
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
         "  else { (x,) = right(); } "
         "  n++; "
         "} "
-        "tp: 1: { end(); }",
+        "ta: 1: { end(); }",
         "branching.fpdl", symbolic_options);
     std::set<std::string> second_calls;
     for (const auto& path : symbolic.paths) {
@@ -256,7 +256,7 @@ int main(int argc, char** argv) {
         "  if (f != 0) { continue; } "
         "  (other,) = plain(); "
         "} "
-        "tp: 1: { end(); }",
+        "ta: 1: { end(); }",
         "continue-control.fpdl", symbolic_options);
     bool saw_continue_skip = false;
     bool saw_continue_fallthrough = false;
@@ -286,7 +286,7 @@ int main(int argc, char** argv) {
         "  if (s == ⊥) { (s, f) = flagged(); } "
         "  else { (other,) = plain(); } "
         "} "
-        "tp: 1: { end(); }",
+        "ta: 1: { end(); }",
         "compound.fpdl", symbolic_options);
     if (compound.paths.size() != 2) {
         std::cerr << "one compound false outcome was expanded into multiple control-flow paths\n";
@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
         "gvar: cnt n = 0; bit s = 0; "
         "tc: 1: n == 1 "
         "af: while(!tc) { (s,) = e(); n++; } "
-        "tp: 1: { end(); }",
+        "ta: 1: { end(); }",
         "signed.fpdl", symbolic_options);
     if (signed_g.paths.empty() || signed_g.paths[0].events.empty()) {
         std::cerr << "signed g: produced no SE event\n";
@@ -319,7 +319,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (!rejects("protocol bad: code: [[1,0,1]] [-[Z]] se: gvar: bit x = 0; "
-                 "tc: 1: true af: while(!tc) {} tp: 1: { end(); }")) {
+                 "tc: 1: true af: while(!tc) {} ta: 1: { end(); }")) {
         std::cerr << "a signed code generator was accepted\n";
         return 1;
     }

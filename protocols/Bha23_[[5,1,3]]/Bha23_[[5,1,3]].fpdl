@@ -155,7 +155,7 @@ protocol Bha23_[[5,1,3]]:
             }
         }
 
-    tp:
+    ta:
         1: { 
             bit[4] s_full = ⊥;
             (s_full,) = FSE_b();

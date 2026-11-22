@@ -78,7 +78,7 @@ protocol CR17_[[5,1,3]]:
             n += 1;
         }
 
-    tp:
+    ta:
         1: { 
             bit[4] s_full = ⊥;
             (s_full,) = FSE_b();
