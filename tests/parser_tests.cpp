@@ -299,5 +299,30 @@ int main(int argc, char** argv) {
         }
     }
 
+    // A g: row may carry a minus sign; the code's generators may not.
+    const auto signed_g = fpdl::Parser::parse_string(
+        "protocol signed: code: [[2,0,1]] [[Z,Z],[X,X]] se: "
+        "e { file: \"e.qasm\" qd: q qm: a g: [-[Z,Z],[X,X]] } "
+        "gvar: cnt n = 0; bit s = 0; "
+        "tc: 1: n == 1 "
+        "af: while(!tc) { (s,) = e(); n++; } "
+        "tp: 1: { end(); }",
+        "signed.fpdl", symbolic_options);
+    if (signed_g.paths.empty() || signed_g.paths[0].events.empty()) {
+        std::cerr << "signed g: produced no SE event\n";
+        return 1;
+    }
+    const auto& signed_event = signed_g.paths[0].events[0];
+    if (signed_event.measures != std::vector<std::string>{"ZZ", "XX"} ||
+        signed_event.negated != std::vector<bool>{true, false}) {
+        std::cerr << "g: [-[Z,Z],[X,X]] was not read as -ZZ, +XX\n";
+        return 1;
+    }
+    if (!rejects("protocol bad: code: [[1,0,1]] [-[Z]] se: gvar: bit x = 0; "
+                 "tc: 1: true af: while(!tc) {} tp: 1: { end(); }")) {
+        std::cerr << "a signed code generator was accepted\n";
+        return 1;
+    }
+
     return 0;
 }

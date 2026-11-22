@@ -344,8 +344,12 @@ private:
     //
     // Either way a backend wants the dense Pauli string, so normalise here.
     // Entries lex as Identifier tokens, since I/X/Y/Z and Z12 are identifiers.
+    //
+    // A row may carry a minus sign, -[...], only where `negated` is given
+    // (an SE's g:); it receives one entry per row.
     std::vector<std::string> read_pauli_matrix(NodeId node, int width,
-                                               const std::string& what) {
+                                               const std::string& what,
+                                               std::vector<bool>* negated = nullptr) {
         const auto& rows = ast_.node(node);
         if (rows.kind != "VectorLiteral") {
             fail_at(rows.location, what + " must be a matrix of Pauli rows");
@@ -354,7 +358,13 @@ private:
 
         std::vector<std::string> out;
         for (const auto& row_edge : rows.edges) {
-            const auto& row = ast_.node(row_edge.target);
+            const auto& written = ast_.node(row_edge.target);
+            const bool minus = written.kind == "NegatedVector";
+            if (minus && !negated) {
+                fail_at(written.location, what + " rows cannot carry a sign; only an SE's g: can");
+            }
+            if (negated) negated->push_back(minus);
+            const auto& row = minus ? ast_.node(written.edges.front().target) : written;
             if (row.kind != "VectorLiteral") {
                 fail_at(row.location, what + " must be a matrix of Pauli rows");
             }
@@ -586,8 +596,10 @@ private:
         se_syndrome_qubits_[name.text] = qm;
         if (!qf.empty()) se_flag_qubits_[name.text] = qf;
         if (generators_node != 0) {
+            std::vector<bool> negated;
             se_measures_[name.text] = read_pauli_matrix(generators_node, code_.n,
-                                                        "SE '" + name.text + "' g:");
+                                                        "SE '" + name.text + "' g:", &negated);
+            se_negated_[name.text] = std::move(negated);
         }
         if (!signature_edges.empty()) {
             fields.push_back({"return_signature", make("TupleType", "", std::move(signature_edges), name.location)});
@@ -954,6 +966,12 @@ private:
             return expression;
         }
         if (match("[")) return parse_list("VectorLiteral", token.location, "]");
+        // A minus sign in front of a list: a negated Pauli row in an SE's g:.
+        if (check("-") && current(1).text == "[") {
+            advance(); advance();
+            const auto row = parse_list("VectorLiteral", current().location, "]");
+            return sequence("NegatedVector", {row}, token.location);
+        }
         if (match("{")) return parse_list("BitConcatenation", token.location, "}");
         if (check("mr") && current(1).text == "[") {
             advance(); expect("[");
@@ -1876,7 +1894,8 @@ private:
                                      lookup_or_empty(se_data_qubits_, se_name),
                                      lookup_or_empty(se_syndrome_qubits_, se_name),
                                      lookup_optional(se_flag_qubits_, se_name),
-                                     lookup_measures(se_name)});
+                                     lookup_measures(se_name),
+                                     lookup_negated(se_name)});
         if (!targets.empty()) state.values[syntax(targets[0]).value] = {syndrome, {}, {}, false};
         if (targets.size() == 2) state.values[syntax(targets[1]).value] = {*flag, {}, {}, false};
         return {std::move(state)};
@@ -2229,6 +2248,11 @@ private:
         if (found == table.end()) return std::nullopt;
         return found->second;
     }
+    std::vector<bool> lookup_negated(const std::string& key) const {
+        const auto found = se_negated_.find(key);
+        return found == se_negated_.end() ? std::vector<bool>() : found->second;
+    }
+
     std::vector<std::string> lookup_measures(const std::string& key) const {
         const auto found = se_measures_.find(key);
         return found == se_measures_.end() ? std::vector<std::string>() : found->second;
@@ -2239,6 +2263,7 @@ private:
     std::unordered_map<std::string, std::string> se_syndrome_qubits_;
     std::unordered_map<std::string, std::string> se_flag_qubits_;
     std::unordered_map<std::string, std::vector<std::string>> se_measures_;
+    std::unordered_map<std::string, std::vector<bool>> se_negated_;
     CodeSpec code_;
     std::set<std::string> global_names_;
     std::set<std::string> tc_ids_;

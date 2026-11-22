@@ -321,13 +321,23 @@ std::vector<CircuitIssue> check_circuit(const QasmProgram&              program,
             continue;
         }
         const auto sign = group_sign(*at_start, qs.data, stabilizers);
+        // g: may write a syndrome row as -[...]: the bit measures minus the
+        // code's stabilizer, so it reads 1 without errors, by design.
+        const bool declared_minus = is_syndrome && in.target.index < circuit.negated.size() &&
+                                    circuit.negated[in.target.index];
+        const std::string declared = (declared_minus ? "-" : "") + on_data;
         if (!sign) {
             add(K::Determinism, in.line,
                 label + " observes " + on_data + ", which is not a stabilizer: its outcome depends on "
                         "the encoded state");
-        } else if (*sign < 0) {
+        } else if (*sign < 0 && !declared_minus) {
             add(K::Sign, in.line,
-                label + " observes -" + on_data + ": without errors it reads 1, not 0");
+                label + " observes -" + on_data + ": without errors it reads 1, not 0" +
+                    (is_syndrome ? " (write the row as -[...] in g: if that is intended)" : ""));
+        } else if (*sign > 0 && declared_minus) {
+            add(K::Sign, in.line,
+                label + " observes +" + on_data + ": without errors it reads 0, but g: declares " +
+                    declared + ", which reads 1");
         }
     }
     for (std::size_t b = 0; b < width; ++b) {
@@ -415,7 +425,9 @@ CircuitReport check_circuits(const Dag& dag) {
         std::ostringstream key;
         key << c.qasm.string() << '|' << c.data_qubits << '|' << c.syndrome_qubits << '|'
             << c.flag_qubits.value_or("") << '|';
-        for (const auto& g : c.measures) key << g << ',';
+        for (std::size_t i = 0; i < c.measures.size(); ++i) {
+            key << (i < c.negated.size() && c.negated[i] ? "-" : "") << c.measures[i] << ',';
+        }
         if (!seen.insert(key.str()).second) continue;
 
         const std::string where = c.se_name + " (" + c.qasm.filename().string() + ")";

@@ -41,6 +41,7 @@ CircuitRef circuit_of(const fpdl::SEEvent& event, const std::filesystem::path& s
     ref.syndrome_qubits = event.syndrome_qubits;
     ref.flag_qubits     = event.flag_qubits;
     ref.measures        = event.measures;
+    ref.negated         = event.negated;
     return ref;
 }
 

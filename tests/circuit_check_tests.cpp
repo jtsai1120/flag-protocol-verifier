@@ -72,8 +72,9 @@ std::string edit(std::string text, const std::string& from, const std::string& t
     return text.replace(at, from.size(), to);
 }
 
-std::vector<std::string> run(const std::string& qasm) {
+std::vector<std::string> run(const std::string& qasm, std::vector<bool> negated = {}) {
     ftec::CircuitRef c;
+    c.negated         = std::move(negated);
     c.se_name         = "FSE_f";
     c.data_qubits     = "data";
     c.syndrome_qubits = "syn";
@@ -86,8 +87,9 @@ std::vector<std::string> run(const std::string& qasm) {
     return issues;
 }
 
-void expect(const std::string& name, const std::string& qasm, const std::string& message) {
-    const auto issues = run(qasm);
+void expect(const std::string& name, const std::string& qasm, const std::string& message,
+            std::vector<bool> negated = {}) {
+    const auto issues = run(qasm, std::move(negated));
     bool found = false;
     for (const auto& i : issues) found |= i.find(message) != std::string::npos;
     check(found, name + ": expected an issue containing \"" + message + "\"" +
@@ -149,6 +151,14 @@ int main(int argc, char** argv) {
 
     expect("syndrome sign flipped (a warning)",
            edit(kGood, "h syn[0]; m[0]", "z syn[0]; h syn[0]; m[0]"), "m[0] observes -XZZXI");
+    {
+        const auto flipped = edit(kGood, "h syn[0]; m[0]", "z syn[0]; h syn[0]; m[0]");
+        check(run(flipped, {true, false, false, false}).empty(),
+              "a flipped syndrome bit declared -[...] in g: still has issues");
+        if (run(flipped, {true, false, false, false}).empty()) std::cout << "  accepted: flipped bit declared -[...] in g:\n";
+    }
+    expect("g: declares -[...] for a bit that reads 0 (a warning)", kGood,
+           "m[0] observes +XZZXI: without errors it reads 0, but g: declares -XZZXI", {true, false, false, false});
     expect("a stray Hadamard on the data",
            edit(kGood, "h syn[0]; m[0]", "h data[2]; h syn[0]; m[0]"), "the circuit disturbs the encoded state");
     expect("a stray X on the data flips the logical sign (a warning)",

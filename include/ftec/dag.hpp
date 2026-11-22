@@ -26,6 +26,7 @@ struct CircuitRef {
     std::optional<std::string> flag_qubits;      // qf:
 
     std::vector<std::string> measures;           // g:
+    std::vector<bool>        negated;            // g: rows written -[...]
 };
 
 struct DagNode {

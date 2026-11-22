@@ -94,10 +94,30 @@ se:
         qd: <data_qreg>
         qm: <measurement_qreg>
         qf: <flag_qreg>                     # required only for a flagged SE
-        g:  <generator_set>                 # claimed measured generator(s)
+        g:  <generator_set>                 # claimed measured generator(s); a row may be -[...]
         #-flag: <t>                         # required only for a flagged SE
     }
 ```
+
+A row of `g` may carry a minus sign, written in front of the row:
+
+```fpdl
+g: [-[I, Z, Z, X, X, Y, Y]]                 # dense
+g: [-[Z1, Z6], [Z2, Z3, Z7, Z8]]            # sparse; only the first row is negated
+```
+
+The sign is relative to the code: `-P` declares that the syndrome bit measures
+minus the code's stabilizer with letters `P`, so it reads 1 when there are no
+errors, by design. Without a sign, the bit must read 0. The circuit check
+compares the two and warns on a mismatch either way. The sign does not change
+the verification itself: outcomes are recorded as the flips that errors cause,
+which a sign does not affect. Only an SE's `g` can carry signs; the `code`
+generators cannot.
+
+For example, in the `[[7,1,3]]` code with generators `IIIXXXX` and `IZZIIZZ`,
+their product is `-IZZXXYY` (with `Y = iXZ`). A circuit that measures
+`+IZZXXYY` therefore reads 1 on the code space, and its row is written
+`-[I, Z, Z, X, X, Y, Y]`.
 
 A relative `file` path is resolved relative to the directory containing the
 `.fpdl` file.

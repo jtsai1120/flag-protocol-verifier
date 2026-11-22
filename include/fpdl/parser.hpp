@@ -103,6 +103,12 @@ struct SEEvent {
 
     // The stabilizers this SE measures, from `g:`; one Pauli string each.
     std::vector<std::string> measures;
+    // One entry per `measures` row: true when the row is written with a minus
+    // sign, `-[...]`. The sign is relative to the code: `-P` says the bit
+    // measures minus the code's stabilizer with letters P, so it reads 1
+    // without errors. Only the circuit check reads it; the verifier works with
+    // the flips that errors cause, which the sign does not change.
+    std::vector<bool> negated;
 };
 
 struct SymbolicPath {

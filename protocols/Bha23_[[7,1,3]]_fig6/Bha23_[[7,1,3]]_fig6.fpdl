@@ -29,7 +29,7 @@ protocol Bha23_[[7,1,3]]_fig6:
             qd: qd
             qm: qm
             qf: qf
-            g: [[I,Z,Z,X,X,Y,Y]]
+            g: [-[I,Z,Z,X,X,Y,Y]]
             #-flag: 1
         }
 
@@ -38,7 +38,7 @@ protocol Bha23_[[7,1,3]]_fig6:
             qd: qd
             qm: qm
             qf: qf
-            g: [[X,I,X,Y,Z,Y,Z]]
+            g: [-[X,I,X,Y,Z,Y,Z]]
             #-flag: 1
         }
 
@@ -47,7 +47,7 @@ protocol Bha23_[[7,1,3]]_fig6:
             qd: qd
             qm: qm
             qf: qf
-            g: [[Z,X,Y,Y,X,Z,I]]
+            g: [-[Z,X,Y,Y,X,Z,I]]
             #-flag: 1
         }
 
