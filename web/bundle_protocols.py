@@ -4,8 +4,11 @@
     web/bundle_protocols.py protocols tests/expected.txt site/playground/protocols.json
 
 Each entry carries the protocol's files (the .fpdl and every .qasm beside it),
-its code parameters, the expected verdict when tests/expected.txt has one, and
-roughly how long a native run takes, so the page can warn before a long run.
+its code parameters, and, from the results page's `table` run (web/results.json),
+the three verdicts the results page shows (circuit validity, protocol validity,
+correctability) and how long the native run took, so the page lists the same
+verdicts and can warn before a long run. tests/expected.txt fills in a verdict
+for a protocol that has no run yet.
 """
 import json
 import re
@@ -29,9 +32,10 @@ NATIVE_SECONDS = {
 
 
 
-# Protocols whose circuits are not valid (ftec-verify stops before verifying
-# them): their parallel schedules make syndrome bits random.
-SE_CHECK_FAILS = {"LL25_[[5,1,3]]_[2,2]", "LL25_[[5,1,3]]_[2,2]^T"}
+# The run fields the playground shows; the same ones the results page's
+# verdict columns read.
+VERDICT_FIELDS = ("circuit_valid", "circuit_problems", "circuit_warnings", "circuits_skipped",
+                  "invalid", "invalid_paths", "flag_bugs", "failures", "min_t", "ftec", "status")
 
 
 def main():
@@ -44,15 +48,13 @@ def main():
 
     # The results page's table runs (tools/site_bench.py), when there are
     # any, are the newest verdicts and timings; the lists above fill the gaps.
-    measured, seconds = {}, {}
+    verdicts, seconds = {}, {}
     if len(sys.argv) > 4 and Path(sys.argv[4]).exists():
         for run in json.loads(Path(sys.argv[4]).read_text())["runs"]:
-            if run.get("config") != "table" or run.get("status") != "ok" or "failures" not in run:
+            if run.get("config") != "table":
                 continue
-            measured[run["protocol"]] = (f"min_t={run.get('min_t', -1)} failures={run['failures']}"
-                                         + (f" invalid={run['invalid']}" if "invalid" in run else "")
-                                         + (f" flagbugs={run['flag_bugs']}" if "flag_bugs" in run else ""))
-            if "total_s" in run:
+            verdicts[run["protocol"]] = {k: run[k] for k in VERDICT_FIELDS if k in run}
+            if run.get("status") == "ok" and "total_s" in run:
                 seconds[run["protocol"]] = run["total_s"]
 
     protocols = []
@@ -69,9 +71,8 @@ def main():
             "name": d.name,
             "entry": entry,
             "n": n, "k": k, "d": dist,
-            "expected": None if d.name in SE_CHECK_FAILS else
-                        measured.get(d.name) or expected.get(d.name) or None,
-            "se_check_fails": d.name in SE_CHECK_FAILS,
+            "verdicts": verdicts.get(d.name),
+            "expected": expected.get(d.name),
             "native_seconds": seconds.get(d.name, NATIVE_SECONDS.get(d.name, 0.1 if dist <= 3 else None)),
             "files": files,
         })

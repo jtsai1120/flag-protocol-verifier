@@ -38,6 +38,34 @@
     if (seconds < 5400) return `about ${Math.round(seconds / 60)} min`;
     return `about ${(seconds / 3600).toFixed(1)} h`;
   }
+  // The three verdicts of the results page's table run, worded as there:
+  // circuit validity, protocol validity, correctability. Each is
+  // [text, good]; a protocol without a run falls back to tests/expected.txt.
+  function verdictsOf(p) {
+    const v = p.verdicts;
+    if (!v) { const e = verdictOf(p); return e ? [[e.text, e.good]] : []; }
+    if (v.status && v.status !== 'ok' && v.failures === undefined) return [[v.status.replace(/\s*\(.*$/, ''), false]];
+    const out = [];
+    const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+    if (v.circuit_valid !== undefined) {
+      out.push(v.circuit_valid
+        ? [v.circuit_warnings ? `circuits valid (${plural(v.circuit_warnings, 'sign warning')})` : 'circuits valid', true]
+        : [`circuits: ${plural(v.circuit_problems, 'problem')}`, false]);
+    }
+    if (v.invalid_paths !== undefined && v.flag_bugs !== undefined) {
+      const bugs = [];
+      if (v.invalid_paths) bugs.push(plural(v.invalid_paths, 'control-flow bug path'));
+      if (v.flag_bugs) bugs.push(plural(v.flag_bugs, 'flag bug'));
+      out.push(bugs.length ? [`protocol not valid (${bugs.join(', ')})`, false] : ['protocol valid', true]);
+    }
+    if (v.failures !== undefined) {
+      out.push(v.failures === 0 ? ['correctable', true]
+        : [`not correctable (${plural(v.failures, 'record')} fail, t = ${v.min_t})`, false]);
+    }
+    return out;
+  }
+  function circuitsInvalid(p) { return !!(p.verdicts && p.verdicts.circuit_valid === false); }
+  function outOfMemory(p) { return !!(p.verdicts && /memory/.test(p.verdicts.status || '')); }
   function verdictOf(p) {
     if (!p.expected) return null;
     const failures = /failures=(\d+)/.exec(p.expected);
@@ -89,10 +117,11 @@
     const meta = el('span', { className: 'meta' });
     if (p) {
       meta.append(`[[${p.n},${p.k},${p.d}]]`);
-      const v = verdictOf(p);
-      if (v) { meta.append(', '); meta.append(el('span', { className: v.good ? 'good' : 'bad', textContent: v.text })); }
-      if (p.se_check_fails) { meta.append(', '); meta.append(el('span', { className: 'bad', textContent: 'circuits not valid' })); }
-      if (p.native_seconds === null) meta.append(', over 2000 s natively');
+      for (const [text, good] of verdictsOf(p)) {
+        meta.append(', ');
+        meta.append(el('span', { className: good ? 'good' : 'bad', textContent: text }));
+      }
+      if (p.native_seconds === null) meta.append(outOfMemory(p) ? '' : ', did not finish natively');
       else if (p.native_seconds >= 1) meta.append(`, ${human(p.native_seconds * WASM_SLOWDOWN)} here`);
       if (ws && ws.edited) meta.append(', edited');
     } else {
@@ -157,12 +186,14 @@
     const note = $('estimate');
     note.className = 'notice';
     if (!p) { note.textContent = 'Files stay in this browser. The .fpdl file’s relative paths resolve against the files listed here.'; return; }
-    if (p.se_check_fails) {
+    if (circuitsInvalid(p)) {
       note.className = 'notice warn';
-      note.textContent = 'These circuits are not valid: their parallel schedule makes syndrome bits random, so the verifier stops before verifying. Run it to see where; tick “Skip the circuit check” to verify the circuits as written anyway.';
+      note.textContent = 'These circuits are not valid, so the verifier stops after the circuit check. Run it to see why; tick “Skip the circuit check” to verify the circuits as written anyway (that is how the protocol validity and correctability listed for it were found).';
     } else if (p.native_seconds === null) {
       note.className = 'notice warn';
-      note.textContent = 'This protocol did not finish within 2000 s natively. It will very likely run out of time or memory here.';
+      note.textContent = outOfMemory(p)
+        ? `This protocol ran out of memory natively (${p.verdicts.status}). It will run out of memory here too.`
+        : 'This protocol did not finish natively. It will very likely run out of time or memory here.';
     } else if (p.native_seconds >= 60) {
       note.className = 'notice warn';
       note.textContent = `Expect ${human(p.native_seconds * WASM_SLOWDOWN)} in the browser (${human(p.native_seconds)} natively). The page stays usable; Stop ends the run.`;
