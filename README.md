@@ -179,10 +179,10 @@ method, 2 vCPU with two runs in parallel:
 
 | Protocol | Records | Time | Peak memory | Verdict |
 |---|---|---|---|---|
-| CB18 [[25,1,5]] 5×5 | 1,938,025 | 290 s | 378 MiB | accepted |
-| CB18 [[30,1,5]] 5×6 | 2,997,132 | 609 s | 497 MiB | accepted |
-| CB18 [[35,1,5]] 5×7 | 4,286,296 | 1,139 s | 638 MiB | accepted |
-| CB18 [[45,1,5]] 5×9 | 7,554,651 | 3,782 s | 1,126 MiB | accepted (earlier checks, not rerun) |
+| CB18 [[25,1,5]] 5×5 | 1,938,025 | 291 s | 387 MiB | accepted |
+| CB18 [[30,1,5]] 5×6 | 2,997,132 | 599 s | 512 MiB | accepted |
+| CB18 [[35,1,5]] 5×7 | 4,286,296 | 1,103 s | 659 MiB | accepted |
+| CB18 [[45,1,5]] 5×9 | 7,554,651 | 3,083 s | 1,126 MiB | accepted |
 | CB18 [[49,1,7]] 7×7 | — | killed after 6,791 s | over 5.7 GiB | out of memory |
 
 The bottleneck is state propagation and fault injection before the final
@@ -329,7 +329,7 @@ the other checks are not evaluated (Algorithm 1).
 | LL25 [[17,1,5]] [2,2,2,1,1]^T | valid | 1 | 1 | 0 | 0 | rejected |
 | LL25 [[19,1,5]] [1,1,1,...]^T | valid | 1 | 1 | 0 | 0 | rejected |
 | LL25 [[19,1,5]] [2,2,2,1,1,1]^T | valid | 1 | 1 | 0 | 0 | rejected |
-| CB18 [[45,1,5]] | | | | | | not rerun yet |
+| CB18 [[45,1,5]] | valid | 0 | 0 | 0 | 0 | accepted |
 | CB18 [[49,1,7]] | | | | | | out of memory (earlier run) |
 
 Compared with the paper's Table 1:
@@ -351,8 +351,8 @@ Compared with the paper's Table 1:
 - Du24 [[17,1,5]]: `Du24_[[17,1,5]]_plain` matches the paper's column (one
   flag bug, three correctability paths). The parallel-flag variant has two
   flag circuits, `F6X_f` and `F6Z_f`, each counted, and six paths.
-- CB18 [[45,1,5]] was not rerun with these checks; [[49,1,7]] ran out of
-  memory in an earlier run.
+- CB18 [[45,1,5]] is accepted (about 52 minutes and 1.1 GiB per method);
+  [[49,1,7]] ran out of memory in an earlier run.
 
 The full table, with times and memory for all four methods, is on the
 website's results page.
