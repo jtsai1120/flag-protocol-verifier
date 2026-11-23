@@ -245,14 +245,21 @@ public:
         pset all = ctx_->empty();
         for (const auto& level : state) all = all | level;
 
-        // Condition 1: no generator splits the residual errors.
+        // Condition 1: no generator splits the residual errors of level
+        // (0, t). Cond 1 applies only to records that prove t circuit faults
+        // happened, and every execution behind such a record has k = t and
+        // no input error (g + k <= t), so (0, t) is all of E_m there.
+        pset top = ctx_->empty();
+        for (std::size_t i = 0; i < state.size(); ++i) {
+            if (levels_[i].first == 0 && levels_[i].second == tau_) top = state[i];
+        }
         facts.same_syndrome = true;
         for (const auto& g : generators_) {
-            const pset commuting = all & ctx_->commute_with(padded(g));
-            if (!commuting.is_empty() && commuting != all) {
+            const pset commuting = top & ctx_->commute_with(padded(g));
+            if (!commuting.is_empty() && commuting != top) {
                 facts.same_syndrome   = false;
                 facts.syndrome_detail = on_data(commuting.any_element().value_or("")) + " and " +
-                                        on_data((all - commuting).any_element().value_or("")) +
+                                        on_data((top - commuting).any_element().value_or("")) +
                                         " differ on " + g;
                 break;
             }

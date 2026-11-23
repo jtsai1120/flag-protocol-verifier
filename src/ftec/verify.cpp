@@ -375,8 +375,9 @@ private:
     // ---- protocol validity (Def. 3.9) ---------------------------------------
     //
     // Every record that reaches a terminal must satisfy one of:
-    //   Cond 1  the record shows t detected faults, and all residual errors of
-    //           the record have one ideal syndrome (phi_CF1 of Eq. 14 is unsat);
+    //   Cond 1  the record proves t circuit faults, and the residual errors of
+    //           the record have one ideal syndrome (phi_CF1 of Eq. 14 is
+    //           unsat). With k = t proved, g + k <= t leaves only level (0, t);
     //   Cond 2  at least m < t detected faults, then t - m + 1 consecutive
     //           identical, unflagged full rounds (structural, no faults searched);
     //   Cond 3  every residual error from input weight r and s faults,
@@ -388,20 +389,20 @@ private:
     // repeated suffix must satisfy the (t - m)-flag condition, whichever
     // condition settles the records.
 
-    // Faults the record exposes (detected-fault lower bound, after CB18
-    // Secs. 2.2 and 3.1). The measurements are grouped into rounds (a round
-    // ends when a generator is about to be measured again). Each SE circuit of
-    // a round that raises a flag is one detected fault (one fault sits in one
-    // circuit, and data errors raise no flag), and afterwards nothing measured
-    // earlier is trusted.
-    // An unflagged round is compared with what is known of the syndrome --
-    // initially the trivial syndrome, since the input is a codeword up to the
-    // input error -- and a disagreement is one detected fault, except that the
-    // disagreement right after a counted one may be the same fault seen twice
-    // (CB18's rule for consecutive rounds). Knowledge is kept as GF(2)
-    // equations over the generators, so a bit that measures a product of
-    // generators is compared too. After a disagreement only the new round is
-    // trusted.
+    // Circuit faults the record proves (detected-fault lower bound, after
+    // CB18 Secs. 2.2 and 3.1). The measurements are grouped into rounds (a
+    // round ends when a generator is about to be measured again). Each SE
+    // circuit of a round that raises a flag is one detected fault (one fault
+    // sits in one circuit, and data errors raise no flag); afterwards nothing
+    // measured earlier is trusted. An unflagged round that disagrees with an
+    // earlier measurement of the same syndrome is one detected fault, except
+    // the disagreement right after a counted one, which may be the same fault
+    // seen twice (CB18's rule for consecutive rounds); after a disagreement
+    // only the new round is trusted. A first measurement is never compared
+    // with the trivial syndrome: an input error could explain it, and only
+    // circuit faults count (Def. 3.9). Knowledge is kept as GF(2) equations
+    // over the generators, so a bit that measures a product of generators is
+    // compared too.
     struct Exposure {
         int                      w = 0;
         std::vector<std::size_t> round_of;   // record entry -> round index
@@ -414,6 +415,7 @@ private:
         };
         std::vector<Round> rounds;
         bool readable = true;   // every bit is a product of generators
+        std::vector<int> w_upto;   // detected faults in the first i rounds
     };
 
     Exposure exposure(const std::vector<RecordEntry>& record) {
@@ -448,9 +450,10 @@ private:
         }
         // count
         std::vector<std::pair<std::uint64_t, bool>> known;   // reduced rows
-        for (std::size_t g = 0; g < r; ++g) known.emplace_back(std::uint64_t{1} << g, false);
         bool skip = false;
+        ex.w_upto.push_back(0);
         for (const auto& round : ex.rounds) {
+            struct Push { Exposure& e; ~Push() { e.w_upto.push_back(e.w); } } push{ex};
             if (round.flagged) { ex.w += round.flagged_ses; known.clear(); skip = false; continue; }
             bool compared = false, changed = false;
             for (const auto& [mask, value] : round.bits) {
@@ -522,25 +525,25 @@ private:
 
     // Def. 3.9 speaks of the paths of a decision tree that branches on the
     // outcomes, and of conditions those paths' guards guarantee. An FPDL path
-    // can merge executions that such a tree keeps apart -- a guard on a
-    // counter, say, takes records with different numbers of detected faults
-    // down one path -- so:
+    // can merge executions such a tree keeps apart (a guard on a counter), so:
     //   * Cond 1 and Cond 3 are checked record by record (Eq. 14 and the
     //     Cond 3 query quantify over the executions of one record anyway);
-    //   * Cond 2 is a property of the path, for each number of detected
-    //     faults c = min(w, t) its records show: it holds for class c when
-    //     EVERY record of the path in that class ends in t - m + 1 identical,
-    //     unflagged full rounds, m = min(c, t - 1) ("at least m < t"). A
-    //     record that merely happens to repeat does not count.
+    //   * Cond 2 with m = min(c, t - 1) is checked for the class of records of
+    //     the path whose rounds before the last t - m + 1 prove exactly c
+    //     circuit faults (at least t for c = t). The class is what a guard on
+    //     the faults detected so far can tell apart; Cond 2 holds for it when
+    //     EVERY record in it ends in t - m + 1 identical, unflagged full
+    //     rounds, so the guards, not chance, force the repetition.
     // A path is a control-flow bug when one of its records satisfies none.
     struct ClassState {
         bool                     form = true;
         std::size_t              records = 0;
-        std::size_t              needing = 0;   // records only Cond 2 could settle
-        std::size_t              needing_strict = 0;   // the same, if Cond 3 may not settle decode()
-        std::optional<ValidityFailure> example;
         std::map<std::string, std::pair<const CircuitRef*, std::size_t>> flags;
         std::vector<RecordEntry> flags_example;
+    };
+    struct Needing {                    // a record only Cond 2 could settle
+        std::uint32_t            classes = 0;   // classes it has the form in
+        bool                     strict  = false;   // needs it only if Cond 3 may not settle decode()
     };
     struct PathState {
         bool                     decode = true;
@@ -548,7 +551,9 @@ private:
         std::vector<RecordEntry> first;
         std::size_t              failing = 0;   // records nothing settles (end paths)
         std::optional<ValidityFailure> example;
-        std::map<int, ClassState> classes;      // c = min(w, t)
+        std::map<int, ClassState> classes;
+        std::vector<Needing>     needing;
+        std::vector<ValidityFailure> needing_examples;   // parallel to needing, first few kept
     };
     std::map<std::size_t, PathState> paths_;
 
@@ -575,19 +580,24 @@ private:
             return;
         }
 
-        const int c = std::min(ex.w, t);
-        const int m = std::min(c, t - 1);
-        const std::size_t need = static_cast<std::size_t>(t - m + 1);
+        // Classes and the form of Cond 2.
+        std::uint32_t with_form = 0;
+        const std::size_t n = ex.rounds.size();
         const std::size_t have = repeated_suffix(ex);
-        ClassState& cls = path.classes[c];
-        ++cls.records;
-        if (cls.form && (t < 1 || !ex.readable || have < need)) {
-            cls.form = false;
-            cls.flags.clear();
-        }
-        if (cls.form) {
+        for (int c = 0; c <= t && t >= 1; ++c) {
+            const int m = std::min(c, t - 1);
+            const std::size_t need = static_cast<std::size_t>(t - m + 1);
+            const std::size_t prefix = n >= need ? n - need : n;
+            const int wp = ex.w_upto[prefix];
+            if (c < t ? wp != c : wp < t) continue;
+            ClassState& cls = path.classes[c];
+            ++cls.records;
+            const bool form = ex.readable && n >= need && have >= need;
+            if (!form) { cls.form = false; cls.flags.clear(); continue; }
+            with_form |= std::uint32_t{1} << c;
+            if (!cls.form) continue;
             if (cls.flags_example.empty()) cls.flags_example = record;
-            for (std::size_t r = ex.rounds.size() - need; r < ex.rounds.size(); ++r) {
+            for (std::size_t r = n - need; r < n; ++r) {
                 for (const std::size_t e : ex.rounds[r].entries) {
                     const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
                     auto& slot = cls.flags[circuit.qasm.string() + "\n" + circuit.se_name];
@@ -596,45 +606,48 @@ private:
                 }
             }
         }
+
         if (c1) { ++result_.by_condition[0]; return; }
-        ++cls.needing_strict;
-        if (c3 && options_.decode_may_use_cond3) { ++result_.by_condition[2]; return; }
-        ++cls.needing;
-        if (!cls.example) {
+        const bool by3 = c3 && options_.decode_may_use_cond3;
+        if (by3) ++result_.by_condition[2];
+        path.needing.push_back(Needing{with_form, by3});
+        if (path.needing_examples.size() < 1 && !by3) {
             const std::string why1 = !facts.same_syndrome ? facts.syndrome_detail
-                : "the record exposes " + std::to_string(ex.w) + " fault(s), fewer than t = " + std::to_string(t);
+                : "the record proves " + std::to_string(ex.w) + " circuit fault(s), fewer than t = " + std::to_string(t);
             const std::string why2 = !ex.readable
                 ? std::string("an SE measures something that is not a product of the code's generators")
-                : have < need ? "m = " + std::to_string(m) + " needs " + std::to_string(need) +
-                                " identical unflagged full rounds at the end, the record has " + std::to_string(have)
-                              : "other records of this path with " + std::to_string(c) +
-                                " detected fault(s) do not end that way, so the guards do not force it";
-            cls.example = ValidityFailure{terminal.path_id, terminal.terminal_action, record,
-                "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + facts.weight_detail};
+                : with_form ? std::string("the guards do not force the repeated rounds (other records of this path in the same class do not repeat)")
+                            : "the record does not end in t - m + 1 identical unflagged full rounds (it has " + std::to_string(have) + ")";
+            path.needing_examples.push_back(ValidityFailure{terminal.path_id, terminal.terminal_action, record,
+                "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + facts.weight_detail});
         }
     }
 
   public:
     // Settle Cond 2 class by class, report the paths with a record nothing
-    // settles, and check the flag condition of every class that has the form
-    // of Cond 2 (Def. 3.9 (2)), whichever condition settles its records.
+    // settles, and check the flag condition of every class where Cond 2 holds
+    // (Def. 3.9 (2)), whichever condition settles its records.
     void finish() {
         const int t = dag_.code.fault_budget();
         for (auto& [path_id, path] : paths_) {
+            std::uint32_t forced = 0;
+            for (const auto& [c, cls] : path.classes) if (cls.form && cls.records) forced |= std::uint32_t{1} << c;
             std::optional<ValidityFailure> example = path.example;
             std::size_t failing = path.failing;
+            bool strict_bug = path.failing > 0;
             PathValidity pv{path_id, path.decode ? "decode" : "end", path.records, path.c1, 0, path.c3, 0, {}};
             pv.example = path.first;
-            for (auto& [c, cls] : path.classes) if (path.decode && cls.form) pv.cond2 += cls.records;
-            bool strict_bug = path.failing > 0;
+            for (const auto& nd : path.needing) {
+                const bool by2 = (nd.classes & forced) != 0;
+                if (by2) ++pv.cond2;
+                if (!by2) strict_bug = true;
+                if (by2) { if (!nd.strict) ++result_.by_condition[1]; continue; }
+                if (nd.strict) continue;          // settled by Cond 3
+                ++failing;
+                if (!example && !path.needing_examples.empty()) example = path.needing_examples.front();
+            }
             for (auto& [c, cls] : path.classes) {
-                if (!cls.form && cls.needing_strict) strict_bug = true;
-                if (cls.form) { result_.by_condition[1] += cls.needing; }
-                else if (cls.needing) {
-                    failing += cls.needing;
-                    if (!example) example = cls.example;
-                }
-                if (!cls.form) continue;
+                if (!(forced >> c & 1)) continue;
                 const int k = t - std::min(c, t - 1);
                 for (const auto& [key, slot] : cls.flags) {
                     const CircuitRef& circuit = *slot.first;
@@ -658,7 +671,7 @@ private:
             if (strict_bug) ++result_.invalid_paths_strict;
             pv.failing = failing;
             result_.by_path.push_back(std::move(pv));
-            if (example) {
+            if (example && failing) {
                 result_.validity_failures.push_back(*example);
                 extra_invalid_records_ += failing - 1;
             }

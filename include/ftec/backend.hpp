@@ -74,7 +74,7 @@ public:
 
     // What protocol validity (Def. 3.9 of the verification paper) asks of the
     // residual errors at a terminal:
-    //   same_syndrome   Condition 1: every error has the same ideal syndrome;
+    //   same_syndrome   Condition 1: every error of level (0, t) has the same ideal syndrome;
     //   weight_bounded  Condition 3: every error from an input of weight r and
     //                   s faults has minimum weight at most s.
     // `syndrome_detail` and `weight_detail` name witnesses when the
