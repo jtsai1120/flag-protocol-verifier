@@ -69,7 +69,8 @@ void usage(const char* argv0) {
         << "                   answered: bruteforce, table, image (default) or square\n"
         << "  --bound=N        fix the BMC bound instead of searching for one\n"
         << "  --max-paths=N    give up past this many symbolic paths (default 5000)\n"
-        << "  --first          stop at the first unprotected path\n"
+        << "  --first          stop at the first failure: an unprotected record, or a\n"
+        << "                   record no condition of Def. 3.9 can settle\n"
         << "  --tree[=N]       print the decision tree as JSON and exit; past N nodes\n"
         << "                   (default 2000) print only its size\n"
         << "  --no-input-errors\n"
@@ -557,6 +558,9 @@ int main(int argc, char** argv) {
                   << "records reached : " << result.records_reached << "\n"
                   << "circuits run    : " << result.se_applications << "\n\n";
 
+        if (result.stopped_early) {
+            std::cout << "stopped at the first failure: the rest was not explored\n\n";
+        }
         std::cout << "correctability\n";
         if (result.clean()) {
             std::cout << "no unprotected path found\n";
@@ -611,7 +615,9 @@ int main(int argc, char** argv) {
             }
             std::cout << "control-flow bugs if decode() may not use Cond 3: "
                       << result.invalid_paths_strict << " path(s)\n";
-            if (result.flags_valid()) {
+            if (result.stopped_early) {
+                std::cout << "flag bugs       : not checked (stopped at the first failure)\n";
+            } else if (result.flags_valid()) {
                 std::cout << "flag bugs       : 0 circuit(s)\n";
             } else {
                 std::set<std::string> circuits;

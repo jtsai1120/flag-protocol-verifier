@@ -49,7 +49,7 @@
           <option>image</option><option>table</option><option>square</option><option>bruteforce</option>
         </select>
       </label>
-      <label><input type="checkbox" id="first"> Stop at first failure</label>
+      <label title="Stop at the first unprotected record or the first record no condition can settle. An invalid circuit stops the run anyway; flag bugs need the whole run and are not checked after an early stop."><input type="checkbox" id="first"> Stop at first failure</label>
       <label title="Draw the decision tree of the protocol instead of verifying it"><input type="checkbox" id="tree"> Show decision tree only</label>
       <label title="Verify the circuits as written, even if they are not valid"><input type="checkbox" id="skip-se"> Skip the circuit check</label>
       <label title="Start every run from an error-free input (r = 0)"><input type="checkbox" id="no-input"> No input errors</label>

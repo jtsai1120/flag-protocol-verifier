@@ -305,13 +305,14 @@ public:
             if (reached_.insert(current.path_id).second) ++result_.paths_reached;
             if (auto failure = backend_.check(state)) {
                 note_failure(current, record, *failure);
-                if (options_.stop_at_first_failure) return false;
+                if (options_.stop_at_first_failure) { result_.stopped_early = true; return false; }
             }
             if (options_.check_validity) {
                 const auto started = std::chrono::steady_clock::now();
                 check_validity(current, state, record);
                 result_.validity_seconds += std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - started).count();
+                if (result_.stopped_early) return false;
             }
             return true;
         }
@@ -642,6 +643,8 @@ private:
                 explain_validity(*path.example, facts, ex);
             }
             ++path.failing;
+            // Nothing can settle this record later: a control-flow bug now.
+            if (options_.stop_at_first_failure) result_.stopped_early = true;
             return;
         }
 
@@ -676,6 +679,12 @@ private:
         const bool by3 = c3 && options_.decode_may_use_cond3;
         if (by3) ++result_.by_condition[2];
         path.needing.push_back(Needing{with_form, by3});
+        // A record that is not settled now and has the form of Cond 2 in no
+        // class can never be settled: it is a control-flow bug already. Only
+        // whether Cond 2 is forced has to wait for the rest of the path.
+        const bool definite = !by3 && with_form == 0;
+        const bool stop = definite && options_.stop_at_first_failure;
+        if (stop) path.needing_examples.clear();
         if (path.needing_examples.size() < 1 && !by3) {
             const std::string why1 = !facts.same_syndrome ? facts.syndrome_detail
                 : "the record detects " + std::to_string(ex.w) + " fault(s), fewer than t = " + std::to_string(t);
@@ -691,6 +700,7 @@ private:
             example.why3 = facts.weight_detail;
             explain_validity(example, facts, ex);
         }
+        if (stop) result_.stopped_early = true;
     }
 
   public:
@@ -717,6 +727,9 @@ private:
                 if (!example && !path.needing_examples.empty()) example = path.needing_examples.front();
             }
             for (auto& [c, cls] : path.classes) {
+                // After an early stop the classes are incomplete: whether
+                // Cond 2 is forced, and so the flag condition, is not known.
+                if (result_.stopped_early) break;
                 if (!(forced >> c & 1)) continue;
                 const int k = t - c;
                 for (const auto& [key, slot] : cls.flags) {

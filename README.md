@@ -86,7 +86,7 @@ What `make` does:
 | `--fqcv=METHOD` | `image` | How the final E1E2 query is answered: `bruteforce`, `table`, `image` or `square` (see below) |
 | `--bound=N` | searched | Fix the BMC bound; without it the bound doubles from 16 until the expansion is complete (up to 65536) |
 | `--max-paths=N` | `5000` | Give up past this many symbolic paths |
-| `--first` | off | Stop at the first unprotected path |
+| `--first` | off | Stop at the first failure: an unprotected record, or a record no condition of Def. 3.9 can settle. Circuit validity already stops the run before the walk; flag bugs, and control-flow bugs that turn on whether Condition 2 is forced, need the whole walk and are not reported after an early stop |
 | `--tree[=N]` | off | Print the decision tree (the merged symbolic paths, with their guards) as JSON and exit without verifying; past N nodes (default 2000) print only its size. The playground draws it |
 | `--explain` | off | Trace every counterexample back to one execution behind it: an input error and the circuit faults (gate, qubits, Pauli) that produce it |
 | `--json-out=FILE` | off | Also write the decision tree and every counterexample, traced, as JSON (implies `--explain`). The playground uses it |

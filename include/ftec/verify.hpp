@@ -101,9 +101,12 @@ struct VerifyOptions {
     // flag bug, one execution behind it (Backend::explain).
     bool explain = false;
 
-    // Stop as soon as a path fails. The smallest failing fault count is still
-    // correct: the walk visits states in fault-count order within a node, and
-    // min_fault_count is taken over everything seen so far.
+    // Stop as soon as a path fails: an unprotected record (correctability), or
+    // a record no condition of Def. 3.9 can settle (a control-flow bug that
+    // does not depend on the rest of its path). Circuit validity is checked
+    // before the walk and stops the run anyway; flag bugs and control-flow
+    // bugs that turn on whether Cond 2 is forced need the whole walk, so they
+    // are not reported after an early stop.
     bool stop_at_first_failure = false;
 
     // Protocol validity (Def. 3.9), path by path, as in Algorithm 1:
@@ -135,6 +138,9 @@ struct VerifyResult {
     std::size_t se_applications   = 0;   // circuits actually run
     std::size_t states_explored   = 0;
     int         min_fault_count  = -1;  // fewest faults that break the protocol
+    // VerifyOptions::stop_at_first_failure stopped the walk at a correctability
+    // failure or a control-flow bug: the rest is unexplored, flag bugs unchecked.
+    bool        stopped_early    = false;
     std::vector<PathFailure> failures;
 
     // Protocol validity, when checked: how many terminating paths each
