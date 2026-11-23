@@ -609,13 +609,12 @@
         `<div class="cond" id="cond-3"><h4>Condition 3 fails</h4><p>${subs(item.why3)}</p>`,
         item.heavy ? provenanceHtml('The error', item.heavy, item.record, 'w0') : '', `</div>`);
       detail.innerHTML = html.join('');
-      // One figure per condition.
+      // A figure for Condition 1 and one for Condition 3 (Condition 2 is about
+      // the record's shape, which the rounds table and the tree already show).
       const split = (item.split || []).map((w, i) => [w, `error ${i + 1}`, i ? 'w2' : 'w1']);
       recordFigure($('cond-1'), item.record, split.length
         ? 'Condition 1: two executions behind this record whose errors a generator tells apart'
         : `Condition 1: the record, circuit by circuit, with what each measured (${item.detected} fault${item.detected === 1 ? '' : 's'} detected, t = ${item.t})`, split);
-      const lastRounds = (item.rounds || []).slice(-(item.t + 1)).flatMap(r => r.steps);
-      recordFigure($('cond-2'), item.record, 'Condition 2: the last rounds before the terminal, with what they measured', [], lastRounds.length ? lastRounds : null);
       if (item.heavy) recordFigure($('cond-3'), item.record, 'Condition 3: an execution behind this record that leaves too heavy an error', [[item.heavy, 'C3', 'w0']]);
     } else {
       const circuit = cex.circuits[item.se];
