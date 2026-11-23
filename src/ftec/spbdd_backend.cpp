@@ -258,9 +258,10 @@ public:
             const pset commuting = top & ctx_->commute_with(padded(g));
             if (!commuting.is_empty() && commuting != top) {
                 facts.same_syndrome   = false;
-                facts.syndrome_detail = on_data(commuting.any_element().value_or("")) + " and " +
-                                        on_data((top - commuting).any_element().value_or("")) +
-                                        " differ on " + g;
+                const std::string a = on_data(commuting.any_element().value_or(""));
+                const std::string b = on_data((top - commuting).any_element().value_or(""));
+                facts.syndrome_detail = a + " and " + b + " differ on " + g;
+                facts.syndrome_witnesses = {a, b};
                 break;
             }
         }
@@ -272,7 +273,10 @@ public:
             const pset outside = outside_of(state[i], within(s));
             if (outside.is_empty()) continue;
             facts.weight_bounded = false;
-            facts.weight_detail = on_data(outside.any_element().value_or("")) + " (input weight " +
+            facts.weight_witness = on_data(outside.any_element().value_or(""));
+            facts.weight_r = levels_[i].first;
+            facts.weight_s = s;
+            facts.weight_detail = facts.weight_witness + " (input weight " +
                            std::to_string(levels_[i].first) + ", " + std::to_string(s) +
                            " fault(s)) has minimum weight above " + std::to_string(s);
             break;
@@ -323,6 +327,66 @@ public:
         }
         flag_cache_.emplace(key, problem);
         return problem;
+    }
+
+    Provenance explain(const std::vector<ExplainStep>& path, const std::string& residual,
+                       const std::function<bool(int, int)>& level_ok) override {
+        std::vector<ReplayStep> steps;
+        for (const auto& step : path) {
+            const QasmProgram& program = program_for(*step.circuit);
+            const Records&     records = records_for(*step.circuit, program);
+            Required required;
+            for (const auto& reg : program.bits) required[reg.name].assign(reg.width, -1);
+            const auto pin = [&](const std::string& reg, const std::vector<bool>& bits) {
+                auto& slot = required[reg];
+                for (std::size_t i = 0; i < bits.size() && i < slot.size(); ++i) slot[i] = bits[i] ? 1 : 0;
+            };
+            pin(records.syndrome, step.outcome.syndrome);
+            if (records.flag) pin(*records.flag, step.outcome.flag);
+            steps.push_back(ReplayStep{step.circuit, std::move(required)});
+        }
+        std::vector<int> fault_levels;
+        for (const auto& level : levels_) fault_levels.push_back(level.second);
+        std::vector<int> input_levels;
+        for (const auto& level : levels_) input_levels.push_back(level.first);
+        return trace_and_explain(states_[0], succ_, input_levels, fault_levels, steps, residual, level_ok);
+    }
+
+    Provenance explain_flag(const CircuitRef& circuit, int k) override {
+        const QasmProgram& program = program_for(circuit);
+        const Layout       layout  = layout_for(program, circuit);
+        const Records&     records = records_for(circuit, program);
+        grow_to(layout.total);
+        State start{ctx_->identity()};
+        std::vector<int> succ, inputs{0}, faults{0};
+        for (int s = 1; s <= k; ++s) {
+            start.push_back(ctx_->empty());
+            succ.push_back(s);
+            inputs.push_back(0);
+            faults.push_back(s);
+        }
+        succ.push_back(-1);
+        for (auto& branch : simulate(start, program, layout, succ)) {
+            if (records.flag) {
+                const auto flags = read_register(branch.bits, *records.flag, circuit);
+                if (std::find(flags.begin(), flags.end(), true) != flags.end()) continue;
+            }
+            for (int s = 1; s <= k; ++s) {
+                pset level = branch.by_t[static_cast<std::size_t>(s)];
+                level.reset(layout.ancillas);
+                const pset outside = outside_of(level, within(s));
+                if (outside.is_empty()) continue;
+                Required required;
+                for (const auto& [name, bits] : branch.bits) {
+                    auto& slot = required[name];
+                    for (const bool bit : bits) slot.push_back(bit ? 1 : 0);
+                }
+                const std::string residual = on_data(outside.any_element().value_or(""));
+                return trace_and_explain(start, succ, inputs, faults, {ReplayStep{&circuit, required}},
+                                         residual, [s](int, int fs) { return fs == s; });
+            }
+        }
+        return {};
     }
 
     std::string describe(StateId id) const override {
@@ -761,6 +825,206 @@ private:
         return out;
     }
 
+    // ---- provenance ------------------------------------------------------
+    //
+    // The traversal keeps only which errors are left, never how they arose.
+    // To explain one of them, its path is run again with every outcome fixed
+    // as recorded, keeping the state before every instruction; then the error
+    // is walked back. Before a gate with a fault location, an error at level
+    // j either was at level j already (pulled back through the gate), or came
+    // from level i with succ[i] = j and a fault on the gate's qubits: then
+    // some error of level i agrees with it off those qubits. Both are
+    // membership questions on the stored sets, so the walk never guesses and
+    // never dead-ends.
+
+    using Required = std::map<std::string, std::vector<int>>;   // per bit: 0, 1, or -1 for free
+    struct ReplayStep {
+        const CircuitRef* circuit = nullptr;
+        Required          required;
+    };
+    struct TraceOp {
+        enum class Kind { Reset, Gate, Measure } kind = Kind::Reset;
+        std::vector<int>         qubits;
+        std::size_t              step = 0, instruction = 0, layout = 0;
+        const QasmInstruction*   source = nullptr;
+        State                    pre;
+    };
+
+    Provenance trace_and_explain(const State& start, const std::vector<int>& succ,
+                                 const std::vector<int>& input_of, const std::vector<int>& faults_of,
+                                 const std::vector<ReplayStep>& steps, const std::string& residual,
+                                 const std::function<bool(int, int)>& level_ok) {
+        std::vector<Layout> layouts;
+        std::vector<const QasmProgram*> programs;
+        for (const auto& step : steps) {
+            programs.push_back(&program_for(*step.circuit));
+            layouts.push_back(layout_for(*programs.back(), *step.circuit));
+            grow_to(layouts.back().total);
+        }
+
+        // Forward, keeping every state.
+        std::vector<TraceOp> ops;
+        State state = start;
+        const auto record = [&](TraceOp::Kind kind, std::vector<int> qubits, std::size_t step,
+                                std::size_t instruction, std::size_t layout, const QasmInstruction* source) {
+            TraceOp op;
+            op.kind = kind;
+            op.qubits = std::move(qubits);
+            op.step = step;
+            op.instruction = instruction;
+            op.layout = layout;
+            op.source = source;
+            op.pre = state;
+            ops.push_back(std::move(op));
+        };
+        for (std::size_t k = 0; k < steps.size(); ++k) {
+            const QasmProgram& program = *programs[k];
+            const Layout&      layout  = layouts[k];
+            record(TraceOp::Kind::Reset, layout.ancillas, k + 1, 0, k, nullptr);
+            for (auto& level : state) level.reset(layout.ancillas);
+
+            // A bit fixes only the last measurement written into it.
+            std::map<std::pair<std::string, std::size_t>, std::size_t> last;
+            for (std::size_t i = 0; i < program.instructions.size(); ++i) {
+                const auto& in = program.instructions[i];
+                if (in.kind == QasmInstruction::Kind::Measure) last[{in.target.reg, in.target.index}] = i;
+            }
+            for (std::size_t i = 0; i < program.instructions.size(); ++i) {
+                const auto& in = program.instructions[i];
+                switch (in.kind) {
+                    case QasmInstruction::Kind::Barrier:
+                        break;
+                    case QasmInstruction::Kind::Gate: {
+                        std::vector<int> qs;
+                        for (const auto& q : in.qubits) qs.push_back(qubit_of(q, layout));
+                        record(TraceOp::Kind::Gate, qs, k + 1, i, k, &in);
+                        apply_gate(state, in, layout, succ);
+                        break;
+                    }
+                    case QasmInstruction::Kind::Reset: {
+                        const int q = qubit_of(in.qubits[0], layout);
+                        record(TraceOp::Kind::Reset, std::vector<int>(1, q), k + 1, i, k, &in);
+                        for (auto& level : state) level.reset(std::vector<int>(1, q));
+                        break;
+                    }
+                    case QasmInstruction::Kind::Measure: {
+                        int want = -1;
+                        const auto found = steps[k].required.find(in.target.reg);
+                        if (found != steps[k].required.end() && in.target.index < found->second.size() &&
+                            last[{in.target.reg, in.target.index}] == i) {
+                            want = found->second[in.target.index];
+                        }
+                        if (want < 0) break;
+                        const int q = qubit_of(in.qubits[0], layout);
+                        record(TraceOp::Kind::Measure, std::vector<int>(1, q), k + 1, i, k, &in);
+                        for (auto& level : state) level = level.measure_z(q, want == 1);
+                        break;
+                    }
+                }
+            }
+            record(TraceOp::Kind::Reset, layout.ancillas, k + 1, 0, k, nullptr);
+            for (auto& level : state) level.reset(layout.ancillas);
+        }
+
+        Provenance out;
+        out.residual = residual;
+        const std::string full = padded(residual);
+        int level = -1;
+        for (std::size_t i = 0; i < state.size(); ++i) {
+            if (level_ok(input_of[i], faults_of[i]) && state[i].contains(full)) { level = static_cast<int>(i); break; }
+        }
+        if (level < 0) {
+            // A witness may stand for its whole coset (the queries work up to
+            // stabilizers): trace an element of the same coset that is in the set.
+            const pset coset = ctx_->from_str(full) * code_->S();
+            for (std::size_t i = 0; i < state.size() && level < 0; ++i) {
+                if (!level_ok(input_of[i], faults_of[i])) continue;
+                if (const auto any = (state[i] & coset).any_element()) {
+                    level = static_cast<int>(i);
+                    out.residual = on_data(*any);
+                    out.up_to_stabilizer = true;
+                }
+            }
+            if (getenv("FTEC_DEBUG_EXPLAIN")) std::fprintf(stderr, "explain: %s %s\n", residual.c_str(), level < 0 ? "in no level" : "found up to a stabilizer");
+            if (level < 0) return out;
+        }
+        out.r = input_of[static_cast<std::size_t>(level)];
+        out.s = faults_of[static_cast<std::size_t>(level)];
+
+        // Backward.
+        std::string p = padded(out.residual);
+        const auto fail = [&](const char* where) {
+            if (getenv("FTEC_DEBUG_EXPLAIN")) std::fprintf(stderr, "explain: %s stuck at %s\n", residual.c_str(), where);
+            return out;
+        };
+        for (auto it = ops.rbegin(); it != ops.rend(); ++it) {
+            const TraceOp& op = *it;
+            const pset& pre = op.pre[static_cast<std::size_t>(level)];
+            if (op.kind == TraceOp::Kind::Measure) continue;
+            if (op.kind == TraceOp::Kind::Reset) {
+                const pset cand = pre & ctx_->matching(wildcard(p, op.qubits));
+                const auto any = cand.any_element();
+                if (!any) return fail("a reset");
+                p = *any;
+                continue;
+            }
+            const Layout& layout = layouts[op.layout];
+            const std::string back = through(p, *op.source, layout);
+            if (pre.contains(back)) { p = back; continue; }
+            if (op.qubits.size() != 2) return fail("a one-qubit gate");
+            bool moved = false;
+            for (std::size_t i = 0; i < succ.size() && !moved; ++i) {
+                if (succ[i] != level) continue;
+                State gated{op.pre[i]};
+                apply_gate(gated, *op.source, layout, {-1});
+                const pset cand = gated[0] & ctx_->matching(wildcard(p, op.qubits));
+                const auto any = cand.any_element();
+                if (!any) continue;
+                FaultSite site;
+                site.step = op.step;
+                site.instruction = op.instruction;
+                site.gate = op.source->gate;
+                for (std::size_t j = 0; j < op.qubits.size(); ++j) {
+                    const auto& ref = op.source->qubits[j];
+                    site.qubits.push_back(ref.reg + "[" + std::to_string(ref.index) + "]");
+                    const auto q = static_cast<std::size_t>(op.qubits[j]);
+                    site.pauli += product(p[q], (*any)[q]);
+                }
+                if (site.pauli.find_first_not_of('I') != std::string::npos) out.faults.push_back(site);
+                p = through(*any, *op.source, layout);
+                level = static_cast<int>(i);
+                moved = true;
+            }
+            if (!moved) return fail("a two-qubit gate");
+        }
+        if (!start[static_cast<std::size_t>(level)].contains(p)) return fail("the start");
+        std::reverse(out.faults.begin(), out.faults.end());
+        out.input_error = on_data(p);
+        out.found = true;
+        return out;
+    }
+
+    static std::string wildcard(std::string p, const std::vector<int>& qubits) {
+        for (const int q : qubits) p[static_cast<std::size_t>(q)] = '*';
+        return p;
+    }
+
+    // Unsigned Paulis: every supported gate is its own inverse here.
+    std::string through(const std::string& p, const QasmInstruction& in, const Layout& layout) const {
+        State one{ctx_->from_str(p)};
+        apply_gate(one, in, layout, {-1});
+        return one[0].any_element().value_or(p);
+    }
+
+    static char product(char a, char b) {
+        if (a == 'I') return b;
+        if (b == 'I') return a;
+        if (a == b) return 'I';
+        const std::string xyz = "XYZ";
+        for (const char c : xyz) if (c != a && c != b) return c;
+        return 'I';
+    }
+
     static std::string signature(const std::map<std::string, std::vector<bool>>& bits) {
         std::string key;
         for (const auto& [name, values] : bits) {
@@ -865,7 +1129,8 @@ private:
                    << " but differ logically ("
                    << bits_to_string(code_->logical_component_of(pair->first)) << " vs "
                    << bits_to_string(code_->logical_component_of(pair->second)) << ")";
-            return Failure{static_cast<int>(t), detail.str()};
+            return Failure{static_cast<int>(t), detail.str(),
+                           {on_data(pair->first), on_data(pair->second)}};
         }
         return std::nullopt;
     }

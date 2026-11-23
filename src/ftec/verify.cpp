@@ -368,9 +368,31 @@ private:
         if (result_.min_fault_count < 0 || failure.fault_count < result_.min_fault_count) {
             result_.min_fault_count = failure.fault_count;
         }
-        result_.failures.push_back(
-            PathFailure{terminal.path_id, terminal.terminal_action, record, failure});
+        result_.failures.push_back(PathFailure{terminal.path_id, terminal.terminal_action, record, failure, {}});
     }
+
+  public:
+    // The first counterexample of every path (in the reported order), traced.
+    void explain_failures() {
+        std::set<std::size_t> done;
+        for (auto& f : result_.failures) {
+            if (!done.insert(f.path_id).second) continue;
+            const int budget = f.failure.fault_count;
+            for (const auto& w : f.failure.witnesses) {
+                f.explained.push_back(backend_.explain(
+                    steps_of(f.record), w, [budget](int r, int s) { return r + s <= budget; }));
+            }
+        }
+    }
+
+  private:
+
+    std::vector<ExplainStep> steps_of(const std::vector<RecordEntry>& record) const {
+        std::vector<ExplainStep> steps;
+        for (const auto& entry : record) steps.push_back(ExplainStep{&dag_.nodes[entry.node].circuit, entry.outcome});
+        return steps;
+    }
+
 
     // ---- protocol validity (Def. 3.9) ---------------------------------------
     //
@@ -446,7 +468,7 @@ private:
         for (auto& round : ex.rounds) {
             std::vector<std::uint64_t> masks;
             for (const auto& b : round.bits) masks.push_back(b.first);
-            round.full = rank(masks) == r;
+            round.full = static_cast<std::size_t>(rank(masks)) == r;
         }
         // count
         std::vector<std::pair<std::uint64_t, bool>> known;   // reduced rows
@@ -523,6 +545,42 @@ private:
         return n;
     }
 
+    // Fill the per-condition fields of a validity counterexample.
+    void explain_validity(ValidityFailure& failure, const Backend::TerminalFacts& facts,
+                          const Exposure& ex) {
+        failure.detected = ex.w;
+        for (std::size_t i = 0; i < ex.rounds.size(); ++i) {
+            RoundSummary round;
+            for (const std::size_t e : ex.rounds[i].entries) round.steps.push_back(e + 1);
+            round.flagged = ex.rounds[i].flagged;
+            round.counted = ex.w_upto[i + 1] - ex.w_upto[i];
+            failure.rounds.push_back(std::move(round));
+        }
+        if (!options_.explain) return;
+        const int t = dag_.code.fault_budget();
+        const auto steps = steps_of(failure.record);
+        if (!facts.same_syndrome) {
+            for (const auto& w : facts.syndrome_witnesses) {
+                failure.split.push_back(backend_.explain(steps, w, [t](int r, int s) { return r == 0 && s == t; }));
+            }
+        }
+        if (!facts.weight_bounded) {
+            const int wr = facts.weight_r, ws = facts.weight_s;
+            failure.heavy = backend_.explain(steps, facts.weight_witness,
+                                             [wr, ws](int r, int s) { return r == wr && s == ws; });
+        }
+    }
+
+    static ValidityFailure validity_failure(std::size_t path, const std::string& action,
+                                            const std::vector<RecordEntry>& record, std::string reason) {
+        ValidityFailure failure;
+        failure.path_id = path;
+        failure.terminal_action = action;
+        failure.record = record;
+        failure.reason = std::move(reason);
+        return failure;
+    }
+
     // Def. 3.9 speaks of the paths of a decision tree that branches on the
     // outcomes, and of conditions those paths' guards guarantee. An FPDL path
     // can merge executions such a tree keeps apart (a guard on a counter), so:
@@ -573,8 +631,11 @@ private:
         if (!path.decode) {
             if (c3) { ++result_.by_condition[2]; return; }
             if (!path.example) {
-                path.example = ValidityFailure{terminal.path_id, terminal.terminal_action, record,
-                    "ends without decoding, so only Cond 3 applies, but " + facts.weight_detail};
+                path.example = validity_failure(terminal.path_id, terminal.terminal_action, record,
+                    "ends without decoding, so only Cond 3 applies, but " + facts.weight_detail);
+                path.example->why1 = path.example->why2 = "does not apply: an end() terminal applies no correction";
+                path.example->why3 = facts.weight_detail;
+                explain_validity(*path.example, facts, ex);
             }
             ++path.failing;
             return;
@@ -618,8 +679,13 @@ private:
                 ? std::string("an SE measures something that is not a product of the code's generators")
                 : with_form ? std::string("the guards do not force the repeated rounds (other records of this path in the same class do not repeat)")
                             : "the record does not end in t - m + 1 identical unflagged full rounds (it has " + std::to_string(have) + ")";
-            path.needing_examples.push_back(ValidityFailure{terminal.path_id, terminal.terminal_action, record,
-                "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + facts.weight_detail});
+            path.needing_examples.push_back(validity_failure(terminal.path_id, terminal.terminal_action, record,
+                "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + facts.weight_detail));
+            auto& example = path.needing_examples.back();
+            example.why1 = why1;
+            example.why2 = why2;
+            example.why3 = facts.weight_detail;
+            explain_validity(example, facts, ex);
         }
     }
 
@@ -661,8 +727,9 @@ private:
                     }
                     if (!entry) {
                         result_.flag_failures.push_back(
-                            FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, cls.flags_example});
+                            FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, cls.flags_example, circuit, {}});
                         entry = &result_.flag_failures.back();
+                        if (options_.explain && k > 0) entry->witness = backend_.explain_flag(circuit, k);
                     }
                     entry->paths.insert(path_id);
                     entry->records += slot.second;
@@ -770,13 +837,14 @@ VerifyResult verify(const Dag& dag, Backend& backend, const VerifyOptions& optio
             std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
     }
 
-    std::sort(result.failures.begin(), result.failures.end(),
-              [](const PathFailure& a, const PathFailure& b) {
-                  if (a.failure.fault_count != b.failure.fault_count) {
-                      return a.failure.fault_count < b.failure.fault_count;
-                  }
-                  return a.path_id < b.path_id;
-              });
+    std::stable_sort(result.failures.begin(), result.failures.end(),
+                     [](const PathFailure& a, const PathFailure& b) {
+                         if (a.failure.fault_count != b.failure.fault_count) {
+                             return a.failure.fault_count < b.failure.fault_count;
+                         }
+                         return a.path_id < b.path_id;
+                     });
+    if (options.explain) walker.explain_failures();
     return result;
 }
 

@@ -259,6 +259,63 @@ input[type="number"] { width: 6.5rem; }
 .tree-svg .se-vars { font: 11px var(--serif); fill: var(--muted); }
 .tree-svg .term { font: 600 12px var(--serif); fill: var(--ink); }
 .tree-svg .term-sub { font: 11px var(--serif); fill: var(--muted); }
+.tree-svg .dim { opacity: 0.32; }
+.tree-svg .edge.hl { stroke: var(--x); stroke-width: 2.2; }
+.tree-svg .arrow.hl { fill: var(--x); }
+.tree-svg .guard.hl { fill: var(--x); font-weight: 600; }
+.tree-svg .node.hl rect, .tree-svg .node.hl circle { stroke-width: 2.4; }
+.tree-svg .node.bad circle, .tree-svg .node.bad rect { stroke: var(--x); fill: rgba(180, 35, 44, 0.16); }
+.tree-svg .node.hl .se-vars { fill: var(--ink); font-weight: 600; }
+.tree-svg .mark rect { stroke: none; }
+.tree-svg .mark text { font: 600 9px var(--serif); fill: #fff; }
+.tree-svg .mark.w1 rect, .circuit-svg .fault.w1 rect { fill: var(--z); }
+.tree-svg .mark.w2 rect, .circuit-svg .fault.w2 rect { fill: var(--flag); }
+.tree-svg .mark.w0 rect, .circuit-svg .fault.w0 rect { fill: var(--x); }
+
+.circuit-svg .wire { stroke: var(--muted); stroke-width: 1; }
+.circuit-svg .qlabel { font: 12px var(--mono); fill: var(--ink); }
+.circuit-svg .qlabel.syndrome { fill: var(--z); }
+.circuit-svg .qlabel.flag { fill: var(--flag); }
+.circuit-svg .gbox { fill: var(--panel); stroke: var(--ink); stroke-width: 1.1; }
+.circuit-svg .gbox.meas { fill: var(--code-bg); }
+.circuit-svg .gtext { font: 12px var(--mono); fill: var(--ink); }
+.circuit-svg .gsub { font: 9px var(--mono); fill: var(--muted); }
+.circuit-svg .gline { stroke: var(--ink); stroke-width: 1.2; }
+.circuit-svg .dot { fill: var(--ink); }
+.circuit-svg .oplus { fill: var(--panel); stroke: var(--ink); stroke-width: 1.2; }
+.circuit-svg .fault text { font: 600 11px var(--mono); fill: #fff; }
+.circuit-svg .fault-label { font: 600 10px var(--serif); }
+.circuit-svg .fault-label.w1 { fill: var(--z); }
+.circuit-svg .fault-label.w2 { fill: var(--flag); }
+.circuit-svg .fault-label.w0 { fill: var(--x); }
+
+.out-tabs { display: flex; border-bottom: 1px solid var(--rule); background: var(--paper); }
+.out-tabs[hidden] { display: none; }
+.out-tabs button { font: 0.92rem var(--serif); border: 0; border-right: 1px solid var(--rule); background: none; color: var(--muted); padding: 0.45rem 0.9rem; cursor: pointer; }
+.out-tabs button[aria-selected="true"] { color: var(--ink); background: var(--panel); box-shadow: inset 0 -2px 0 var(--x); }
+.cex-view { display: flex; flex-direction: column; height: calc(100vh - 9rem); min-height: 26rem; position: sticky; top: 0; background: var(--panel); }
+.cex-view[hidden] { display: none; }
+.cex-bar { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--rule); font-size: 0.92rem; }
+.cex-bar select { max-width: 100%; }
+.cex-visual { flex: 1.1; min-height: 12rem; display: flex; }
+.cex-visual > .tree-view.inner { flex: 1; height: auto; position: static; min-height: 0; }
+.cex-detail { flex: 1; overflow: auto; padding: 0.4rem 0.9rem 1.2rem; border-top: 1px solid var(--rule); font-size: 0.93rem; }
+.cex-detail h3 { font-size: 1rem; margin: 0.5rem 0; }
+.cex-detail h4 { font-size: 0.95rem; margin: 0.6rem 0 0.3rem; }
+.cex-detail p { margin: 0.35rem 0; }
+.cex-detail ul { margin: 0.2rem 0; padding-left: 1.2rem; }
+.cex-detail code { font: 0.82rem var(--mono); background: var(--code-bg); padding: 0 0.2rem; border-radius: 2px; }
+.cex-detail .muted { color: var(--muted); }
+.cex-detail .record { font-size: 0.85rem; }
+.cex-detail .prov { border-left: 3px solid var(--rule); padding: 0.1rem 0 0.1rem 0.7rem; margin: 0.5rem 0; }
+.cex-detail .prov.w1 { border-left-color: var(--z); }
+.cex-detail .prov.w2 { border-left-color: var(--flag); }
+.cex-detail .prov.w0 { border-left-color: var(--x); }
+.cex-detail .cond { margin: 0.6rem 0; }
+.cex-detail table.rounds { font-size: 0.85rem; border-collapse: collapse; }
+.cex-detail table.rounds td, .cex-detail table.rounds th { padding: 0.1rem 0.7rem 0.1rem 0; text-align: left; font-weight: normal; color: var(--muted); }
+.cex-detail table.rounds td { color: var(--ink); }
+.tree-view.circuit-card { height: 19rem; position: static; min-height: 0; margin: 0.6rem 0; border: 1px solid var(--rule); }
 .status { font-size: 0.9rem; color: var(--muted); }
 .status.running { color: var(--flag); }
 

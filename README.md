@@ -88,6 +88,8 @@ What `make` does:
 | `--max-paths=N` | `5000` | Give up past this many symbolic paths |
 | `--first` | off | Stop at the first unprotected path |
 | `--tree[=N]` | off | Print the decision tree (the merged symbolic paths, with their guards) as JSON and exit without verifying; past N nodes (default 2000) print only its size. The playground draws it |
+| `--explain` | off | Trace every counterexample back to one execution behind it: an input error and the circuit faults (gate, qubits, Pauli) that produce it |
+| `--json-out=FILE` | off | Also write the decision tree and every counterexample, traced, as JSON (implies `--explain`). The playground uses it |
 | `--no-input-errors` | off | Start every execution from an error-free input (r = 0) |
 | `--no-validity` | off | Skip the protocol validity check |
 | `--skip-circuit-check` | off | Verify the circuits as written even when they are not valid |
@@ -100,6 +102,10 @@ The output lists:
 - protocol validity: how many terminal records each control-flow condition
   settled, then the control-flow bugs (paths) and the flag bugs (circuits),
   each with a counterexample;
+- with `--explain`, under each counterexample, where its errors come from:
+  for correctability the two errors E1 and E2, for a control-flow bug the
+  errors that break Conditions 1 and 3, for a flag bug the faults that raise
+  no flag but leave too heavy an error;
 - the overall verdict, `FTEC : accepted` or `rejected`;
 - backend statistics: cache hit rates, and the time and BDD sizes of the final
   query;
@@ -107,6 +113,21 @@ The output lists:
 
 Dynamic BDD variable reordering is always off. It never paid off on any
 protocol large enough to time.
+
+### Where a counterexample comes from
+
+The traversal keeps only the set of errors still possible, not how each arose,
+so a counterexample is at first just a residual error. `--explain` runs the
+failing record's path again with every outcome fixed as recorded, keeps the
+error sets before every instruction, and walks the residual error back. Before
+a gate, an error of fault level j was either already at level j (it is pulled
+back through the gate) or came from level j − 1 with a fault on the gate's
+qubits (an error of level j − 1 agrees with it off those qubits). Both are
+membership queries on the stored sets, so the walk never guesses and never
+gets stuck. A forward simulation with a plain Pauli frame reproduces the
+record and the residual of every traced execution on the distance-3 protocols,
+on 120 mutants of them (a two-qubit gate dropped or reversed) and on the flag
+bug of Du24 [[17,1,5]].
 
 ### The four methods of the final E1E2 query
 
@@ -353,7 +374,11 @@ website's results page.
 
 `site/` is the static website: a landing page and a playground that runs the
 verifier in the browser as WebAssembly, on the bundled protocols or on your
-own `.fpdl` and `.qasm` files.
+own `.fpdl` and `.qasm` files. The playground draws the decision tree ("Show
+decision tree only"), and after a run lists the counterexamples: picking one
+lights up its path in the tree, with every outcome, and spells out the input
+errors and faults behind it, drawn on the circuits. A flag bug shows its
+circuit with the faults that break the flag condition.
 
 `make site` compiles the verifier with Emscripten and bundles the protocols into
 `site/playground/protocols.json`.

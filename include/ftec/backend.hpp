@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <stdexcept>
@@ -29,6 +30,31 @@ struct Outcome {
 struct Failure {
     int         fault_count = 0;
     std::string detail;      // backend-specific, e.g. the two Paulis
+    std::vector<std::string> witnesses;   // the two errors, on the data qubits
+};
+
+// Where a residual error came from: one execution that produces it, as an
+// input error and a list of circuit faults. Counterexamples only say which
+// errors are left; this is what makes them something a person can follow.
+struct FaultSite {
+    std::size_t              step = 0;          // 1-based: the step-th circuit run
+    std::size_t              instruction = 0;   // index into that circuit's instructions
+    std::string              gate;              // e.g. "cx"
+    std::vector<std::string> qubits;            // e.g. "qm[0]", "qd[3]"
+    std::string              pauli;             // one letter per qubit, after the gate
+};
+struct Provenance {
+    bool                   found = false;
+    int                    r = 0, s = 0;        // input weight bound, fault count of the level
+    std::string            input_error;         // on the data qubits
+    std::vector<FaultSite> faults;              // identity faults left out
+    std::string            residual;            // on the data qubits
+    bool                   up_to_stabilizer = false;   // residual stands in for the witness times a stabilizer
+};
+// One circuit of a path with what it measured.
+struct ExplainStep {
+    const CircuitRef* circuit = nullptr;
+    Outcome           outcome;
 };
 
 // A representation of "the set of error configurations still possible".
@@ -84,6 +110,9 @@ public:
         bool        weight_bounded = false;
         std::string syndrome_detail;
         std::string weight_detail;
+        std::vector<std::string> syndrome_witnesses;   // two errors of level (0, t), data qubits
+        std::string weight_witness;                    // data qubits
+        int         weight_r = 0, weight_s = 0;        // its level
     };
     [[nodiscard]] virtual TerminalFacts terminal_facts(StateId) {
         throw std::runtime_error("this backend cannot check protocol validity");
@@ -96,6 +125,20 @@ public:
     [[nodiscard]] virtual std::optional<std::string> flag_condition(const CircuitRef&, int /*k*/) {
         throw std::runtime_error("this backend cannot check the flag condition");
     }
+
+    // Provenance of `residual` (on the data qubits) at the end of `path`, run
+    // from the initial state with every outcome as recorded, at a level
+    // (r, s) that `level_ok` accepts. Not found if the backend cannot say.
+    [[nodiscard]] virtual Provenance explain(const std::vector<ExplainStep>& /*path*/,
+                                             const std::string& /*residual*/,
+                                             const std::function<bool(int, int)>& /*level_ok*/) {
+        return {};
+    }
+
+    // A counterexample to the k-flag condition of one circuit (the one
+    // flag_condition reports): faults that raise no flag and leave too heavy
+    // an error. Not found if the condition holds.
+    [[nodiscard]] virtual Provenance explain_flag(const CircuitRef&, int /*k*/) { return {}; }
 
     // For diagnostics only.
     [[nodiscard]] virtual std::string describe(StateId) const { return {}; }

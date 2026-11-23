@@ -286,7 +286,7 @@ window.DecisionTree = (() => {
   }
 
   // --- the tree --------------------------------------------------------------
-  function build(data) {
+  function build(data, hl) {
     const byId = new Map(data.nodes.map(n => [n.id, n]));
     const kids = new Map(data.nodes.map(n => [n.id, []]));
     const edgeTo = new Map();
@@ -330,7 +330,14 @@ window.DecisionTree = (() => {
       return box;
     }
     const root = make(data.nodes[0].id);
-    return { root, boxes };
+    if (hl) {
+      for (const b of boxes) {
+        b.hl = b.items.some(n => hl.nodes.has(n.id));
+        b.marks = [];
+        for (const n of b.items) for (const m of (hl.marks.get(n.id) || [])) b.marks.push(m);
+      }
+    }
+    return { root, boxes, hl };
   }
 
   function sizeBox(box) {
@@ -345,7 +352,7 @@ window.DecisionTree = (() => {
       if (n.action === 'decode') { box.w = box.h = Math.max(box.w, 62); }
     } else {
       box.lines = box.items.map(n => n.name);
-      box.vars = box.items.map(n => 'm' + n.step + (n.flagged ? ' f' + n.step : ''));
+      box.vars = box.items.map(n => (box.values && box.values.get(n.id)) || 'm' + n.step + (n.flagged ? ' f' + n.step : ''));
       box.w = Math.max(...box.items.map((n, i) =>
         width(box.lines[i], FONT, MONO) + width(box.vars[i], LABEL_FONT, SERIF) + 14)) + 2 * PAD_X;
       box.h = box.items.length * LINE + 2 * PAD_Y;
@@ -381,6 +388,7 @@ window.DecisionTree = (() => {
   }
 
   function layout(tree) {
+    if (tree.hl) for (const b of tree.boxes) b.values = tree.hl.values;
     tree.root.children.forEach(sizeBox);
     sizeBox(tree.root);
     const rows = [];
@@ -441,15 +449,17 @@ window.DecisionTree = (() => {
           lx = (k.cy === b.cy ? (x0 + x2) / 2 : (xe + x2) / 2); anchor = 'middle';
           ly = k.cy - 5 - k.labelH + LABEL_LINE * 0.8;
         }
-        svg('path', { d, class: 'edge', 'marker-end': 'url(#dt-arrow)' }, edges);
+        const on = tree.hl && b.hl && k.hl, off = tree.hl && !on;
+        svg('path', { d, class: 'edge' + (on ? ' hl' : off ? ' dim' : ''), 'marker-end': `url(#${tree.arrow}${on ? '-hl' : ''})` }, edges);
         k.guard.forEach((line, i) => richText(labels, line, {
-          x: lx, y: ly + i * LABEL_LINE, 'text-anchor': anchor, class: 'guard',
+          x: lx, y: ly + i * LABEL_LINE, 'text-anchor': anchor, class: 'guard' + (on ? ' hl' : off ? ' dim' : ''),
         }));
       }
     }
 
     for (const b of tree.boxes) {
-      const node = svg('g', { class: 'node n-' + (b.kind === 'se' ? b.phase : b.kind === 'terminal' ? b.items[0].action : b.kind) }, nodes);
+      const node = svg('g', { class: 'node n-' + (b.kind === 'se' ? b.phase : b.kind === 'terminal' ? b.items[0].action : b.kind) +
+        (tree.hl ? (b.hl ? ' hl' : ' dim') : '') + (tree.hl && b.hl && b.kind === 'terminal' ? ' bad' : '') }, nodes);
       const x = b.cx - b.w / 2, y = b.cy - b.h / 2;
       if (b.kind === 'terminal' && b.items[0].action === 'decode') {
         svg('circle', { cx: b.cx, cy: b.cy, r: b.w / 2 }, node);
@@ -469,6 +479,12 @@ window.DecisionTree = (() => {
         });
       }
       svg('title', {}, node).textContent = tooltip(b);
+      (b.marks || []).forEach((m, i) => {
+        const mx = b.cx + b.w / 2 - 4 - i * 30, my = b.cy - b.h / 2 - 2;
+        const badge = svg('g', { class: 'mark ' + m.cls }, node);
+        svg('rect', { x: mx - 26, y: my - 9, width: 26, height: 14, rx: 7 }, badge);
+        svg('text', { x: mx - 13, y: my + 2, 'text-anchor': 'middle' }, badge).textContent = m.label;
+      });
     }
   }
 
@@ -486,49 +502,24 @@ window.DecisionTree = (() => {
   }
 
   // --- view: drag to move, wheel to zoom ------------------------------------------
-  function render(container, data) {
-    container.textContent = '';
-    const head = document.createElement('div');
-    head.className = 'tree-head';
-    const info = document.createElement('span');
-    info.textContent = `${data.protocol} · ${data.code}, t = ${data.tau} · ${data.paths} path${data.paths === 1 ? '' : 's'} · ${data.node_count} nodes`;
-    const fit = document.createElement('button');
-    fit.type = 'button'; fit.className = 'small-btn'; fit.textContent = 'Fit';
-    head.append(info, fit);
-    container.append(head);
-
-    if (data.too_large) {
-      const p = document.createElement('p');
-      p.className = 'tree-too-large';
-      p.textContent = `This decision tree has ${data.node_count} nodes, more than the playground draws (${data.limit}). It is too large to show.`;
-      container.append(p);
-      fit.remove();
-      return;
-    }
-
-    const tree = build(data);
-    const dims = layout(tree);
-    const root = svg('svg', { class: 'tree-svg', role: 'img', 'aria-label': 'Decision tree of ' + data.protocol });
-    const defs = svg('defs', {}, root);
-    const marker = svg('marker', { id: 'dt-arrow', viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
-    svg('path', { d: 'M0,0 L10,5 L0,10 z', class: 'arrow' }, marker);
-    const g = svg('g', {}, root);
-    draw(g, tree, dims);
-    container.append(root);
-
+  // Makes `root` (an svg) pan and zoom the group `g` holding a drawing of
+  // dims.width x dims.height. Returns fit(), which shows all of it, or the
+  // box `focus` ({x, y, w, h}) when the whole would be too small to read.
+  function panZoom(root, g, dims, focus) {
     let k = 1, tx = 0, ty = 0;
     const apply = () => g.setAttribute('transform', `translate(${tx},${ty}) scale(${k})`);
-    const fitView = () => {
+    const fitTo = (x, y, w, h) => {
       const r = root.getBoundingClientRect();
-      k = Math.min(1.4, (r.width - 20) / dims.width, (r.height - 20) / dims.height);
+      k = Math.min(1.4, (r.width - 24) / w, (r.height - 24) / h);
       if (!(k > 0)) k = 1;
-      tx = (r.width - dims.width * k) / 2;
-      ty = Math.max(10, (r.height - dims.height * k) / 2);
+      tx = (r.width - w * k) / 2 - x * k;
+      ty = Math.max(10, (r.height - h * k) / 2) - y * k;
       apply();
     };
-    fit.addEventListener('click', fitView);
-    requestAnimationFrame(fitView);
-
+    const fit = () => {
+      fitTo(0, 0, dims.width, dims.height);
+      if (focus && k < 0.6) fitTo(focus.x, focus.y, focus.w, focus.h);
+    };
     let drag = null;
     root.addEventListener('pointerdown', e => {
       if (e.button !== 0) return;
@@ -555,8 +546,60 @@ window.DecisionTree = (() => {
       k = nk;
       apply();
     }, { passive: false });
-    root.addEventListener('dblclick', fitView);
+    root.addEventListener('dblclick', fit);
+    return fit;
   }
 
-  return { render, guardLines };
+  let arrows = 0;
+
+  // opts.highlight: { nodes: Set of node ids, values: Map id -> text shown in
+  // place of the outcome names, marks: Map id -> [{label, cls}] }.
+  function render(container, data, opts = {}) {
+    container.textContent = '';
+    const head = document.createElement('div');
+    head.className = 'tree-head';
+    const info = document.createElement('span');
+    info.textContent = opts.title || `${data.protocol} · ${data.code}, t = ${data.tau} · ${data.paths} path${data.paths === 1 ? '' : 's'} · ${data.node_count} nodes`;
+    const fit = document.createElement('button');
+    fit.type = 'button'; fit.className = 'small-btn'; fit.textContent = 'Fit';
+    head.append(info, fit);
+    container.append(head);
+
+    if (data.too_large) {
+      const p = document.createElement('p');
+      p.className = 'tree-too-large';
+      p.textContent = `This decision tree has ${data.node_count} nodes, more than the playground draws (${data.limit}). It is too large to show.`;
+      container.append(p);
+      fit.remove();
+      return;
+    }
+
+    const tree = build(data, opts.highlight);
+    tree.arrow = 'dt-arrow-' + (++arrows);
+    const dims = layout(tree);
+    const root = svg('svg', { class: 'tree-svg', role: 'img', 'aria-label': 'Decision tree of ' + data.protocol });
+    const defs = svg('defs', {}, root);
+    for (const [id, cls] of [[tree.arrow, 'arrow'], [tree.arrow + '-hl', 'arrow hl']]) {
+      const marker = svg('marker', { id, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+      svg('path', { d: 'M0,0 L10,5 L0,10 z', class: cls }, marker);
+    }
+    const g = svg('g', {}, root);
+    draw(g, tree, dims);
+    container.append(root);
+
+    let focus = null;
+    if (tree.hl) {
+      const on = tree.boxes.filter(b => b.hl);
+      if (on.length) {
+        const x0 = Math.min(...on.map(b => b.cx - b.w / 2)) - 40, x1 = Math.max(...on.map(b => b.cx + b.w / 2)) + 40;
+        const y0 = Math.min(...on.map(b => b.cy - b.h / 2)) - 40, y1 = Math.max(...on.map(b => b.cy + b.h / 2)) + 40;
+        focus = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      }
+    }
+    const fitView = panZoom(root, g, dims, focus);
+    fit.addEventListener('click', fitView);
+    requestAnimationFrame(fitView);
+  }
+
+  return { render, guardLines, panZoom, svg, richText, width };
 })();

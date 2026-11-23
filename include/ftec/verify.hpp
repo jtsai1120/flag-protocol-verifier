@@ -38,8 +38,17 @@ struct PathFailure {
     std::string              terminal_action;
     std::vector<RecordEntry> record;      // what was measured on the way here
     Failure                  failure;
+    std::vector<Provenance>  explained;   // of failure.witnesses, with VerifyOptions::explain
 
     [[nodiscard]] std::string record_string() const;   // "01|1|0"
+};
+
+// How the detected-fault count of a record comes about: its rounds, which SE
+// invocations (1-based steps) each holds, and how many faults each proves.
+struct RoundSummary {
+    std::vector<std::size_t> steps;
+    bool                     flagged = false;
+    int                      counted = 0;
 };
 
 // A terminating path that satisfies none of Conditions 1-3 of Def. 3.9 (a
@@ -50,6 +59,12 @@ struct ValidityFailure {
     std::string              terminal_action;
     std::vector<RecordEntry> record;
     std::string              reason;
+    // The same, condition by condition, for showing (with VerifyOptions::explain).
+    std::string              why1, why2, why3;
+    int                      detected = 0;
+    std::vector<RoundSummary> rounds;
+    std::vector<Provenance>  split;           // Cond 1: two errors of level (0, t) a generator tells apart
+    std::optional<Provenance> heavy;          // Cond 3: an error too far from the code space
 
     [[nodiscard]] std::string record_string() const;
 };
@@ -75,11 +90,17 @@ struct FlagFailure {
     std::size_t              records = 0;
     std::size_t              path_id = 0;      // first example
     std::vector<RecordEntry> record;
+    CircuitRef               circuit;
+    Provenance               witness;          // with VerifyOptions::explain
 
     [[nodiscard]] std::string record_string() const;
 };
 
 struct VerifyOptions {
+    // Work out, for the first counterexample of every failing path and every
+    // flag bug, one execution behind it (Backend::explain).
+    bool explain = false;
+
     // Stop as soon as a path fails. The smallest failing fault count is still
     // correct: the walk visits states in fault-count order within a node, and
     // min_fault_count is taken over everything seen so far.

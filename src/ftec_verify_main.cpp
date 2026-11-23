@@ -2,6 +2,7 @@
 #include "ftec/circuit_check.hpp"
 #include "ftec/spbdd_backend.hpp"
 #include "ftec/verify.hpp"
+#include "ftec/qasm.hpp"
 
 #include <sys/resource.h>
 
@@ -12,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -79,6 +81,10 @@ void usage(const char* argv0) {
         << "                   do not let Condition 3 settle a decode() terminal (as the\n"
         << "                   paper's experiments do); by default Def. 3.9 lets any\n"
         << "                   terminating path use any condition\n"
+        << "  --explain        trace every counterexample back to an input error and\n"
+        << "                   circuit faults that produce it\n"
+        << "  --json-out=FILE  also write the decision tree and every counterexample, as\n"
+        << "                   JSON, to FILE (implies --explain)\n"
         << "  --skip-circuit-check\n"
         << "                   verify the circuits as written even if they are not\n"
         << "                   valid (correct and deterministic)\n";
@@ -141,17 +147,19 @@ std::string json_string(const std::string& text) {
 
 // The decision tree (the merged symbolic paths) as one JSON object, for the
 // playground to draw. Past `limit` nodes only the counts are written: a tree
-// that large cannot be read as a picture anyway.
-void print_tree_json(const ftec::Dag& dag, std::size_t limit) {
+// that large cannot be read as a picture anyway. With `only`, just those
+// nodes (a root-to-terminal chain) and the edges between them.
+std::string tree_json(const ftec::Dag& dag, std::size_t limit,
+                      const std::set<std::size_t>* only = nullptr) {
     std::ostringstream out;
     out << "{\"protocol\":" << json_string(dag.protocol) << ",\"code\":\"[[" << dag.code.n << ','
         << dag.code.k << ',' << dag.code.d << "]]\",\"tau\":" << dag.code.fault_budget()
         << ",\"paths\":" << dag.path_count << ",\"node_count\":" << dag.nodes.size()
         << ",\"limit\":" << limit;
-    if (dag.nodes.size() > limit) {
+    if (only) out << ",\"chain\":true";
+    if (!only && dag.nodes.size() > limit) {
         out << ",\"too_large\":true}";
-        std::cout << out.str() << "\n";
-        return;
+        return out.str();
     }
 
     // An SE node's outcomes are named after its position on the path: the
@@ -160,9 +168,12 @@ void print_tree_json(const ftec::Dag& dag, std::size_t limit) {
     for (const auto& edge : dag.edges) depth[edge.to] = depth[edge.from] + 1;
 
     out << ",\"nodes\":[";
+    bool first = true;
     for (std::size_t i = 0; i < dag.nodes.size(); ++i) {
+        if (only && !only->count(i)) continue;
         const auto& node = dag.nodes[i];
-        if (i) out << ',';
+        if (!first) out << ',';
+        first = false;
         out << "{\"id\":" << node.id;
         switch (node.kind) {
         case ftec::DagNode::Kind::Start:
@@ -191,9 +202,11 @@ void print_tree_json(const ftec::Dag& dag, std::size_t limit) {
         out << '}';
     }
     out << "],\"edges\":[";
-    for (std::size_t i = 0; i < dag.edges.size(); ++i) {
-        const auto& edge = dag.edges[i];
-        if (i) out << ',';
+    first = true;
+    for (const auto& edge : dag.edges) {
+        if (only && (!only->count(edge.from) || !only->count(edge.to))) continue;
+        if (!first) out << ',';
+        first = false;
         out << "{\"from\":" << edge.from << ",\"to\":" << edge.to << ",\"guards\":[";
         for (std::size_t g = 0; g < edge.guards.size(); ++g) {
             if (g) out << ',';
@@ -203,7 +216,204 @@ void print_tree_json(const ftec::Dag& dag, std::size_t limit) {
         out << "]}";
     }
     out << "]}";
-    std::cout << out.str() << "\n";
+    return out.str();
+}
+
+std::string bits(const std::vector<bool>& v) {
+    std::string out;
+    for (const bool b : v) out += b ? '1' : '0';
+    return out;
+}
+
+// ---- counterexamples --------------------------------------------------------
+
+std::string fault_text(const ftec::FaultSite& f, const std::string& se_name) {
+    std::string where;
+    for (std::size_t i = 0; i < f.qubits.size(); ++i) where += (i ? ", " : "") + f.qubits[i];
+    return f.pauli + " on (" + where + ") after " + f.gate + " #" + std::to_string(f.instruction + 1) +
+           " of " + se_name + " (circuit " + std::to_string(f.step) + ")";
+}
+
+void print_provenance(const std::string& label, const ftec::Provenance& p,
+                      const std::vector<ftec::RecordEntry>& record, const std::string& single_circuit = "") {
+    std::cout << "        " << label << " " << p.residual;
+    if (!p.found) { std::cout << ": could not trace it back\n"; return; }
+    if (p.up_to_stabilizer) std::cout << " (the reported error times a stabilizer)";
+    const bool input = p.input_error.find_first_not_of('I') != std::string::npos;
+    std::cout << " <- " << (input ? "input error " + p.input_error : std::string("no input error"));
+    if (p.faults.empty()) std::cout << ", no fault";
+    for (const auto& f : p.faults) {
+        const std::string se = !single_circuit.empty() ? single_circuit
+                             : f.step >= 1 && f.step <= record.size() ? record[f.step - 1].se_name : "?";
+        std::cout << "\n          fault " << fault_text(f, se);
+    }
+    std::cout << "\n";
+}
+
+std::string provenance_json(const ftec::Provenance& p) {
+    std::ostringstream out;
+    out << "{\"found\":" << (p.found ? "true" : "false") << ",\"r\":" << p.r << ",\"s\":" << p.s
+        << ",\"residual\":" << json_string(p.residual) << ",\"input_error\":" << json_string(p.input_error)
+        << ",\"up_to_stabilizer\":" << (p.up_to_stabilizer ? "true" : "false")
+        << ",\"faults\":[";
+    for (std::size_t i = 0; i < p.faults.size(); ++i) {
+        const auto& f = p.faults[i];
+        if (i) out << ',';
+        out << "{\"step\":" << f.step << ",\"instruction\":" << f.instruction << ",\"gate\":"
+            << json_string(f.gate) << ",\"pauli\":" << json_string(f.pauli) << ",\"qubits\":[";
+        for (std::size_t q = 0; q < f.qubits.size(); ++q) out << (q ? "," : "") << json_string(f.qubits[q]);
+        out << "]}";
+    }
+    out << "]}";
+    return out.str();
+}
+
+std::string record_json(const std::vector<ftec::RecordEntry>& record) {
+    std::ostringstream out;
+    out << '[';
+    for (std::size_t i = 0; i < record.size(); ++i) {
+        const auto& e = record[i];
+        if (i) out << ',';
+        out << "{\"node\":" << e.node << ",\"step\":" << i + 1 << ",\"se\":" << json_string(e.se_name)
+            << ",\"s\":" << json_string(bits(e.read_syndrome())) << ",\"f\":" << json_string(bits(e.outcome.flag)) << '}';
+    }
+    out << ']';
+    return out.str();
+}
+
+std::size_t terminal_of(const ftec::Dag& dag, std::size_t path_id) {
+    for (const auto& node : dag.nodes) {
+        if (node.kind == ftec::DagNode::Kind::Terminal && node.path_id == path_id) return node.id;
+    }
+    return 0;
+}
+
+// The nodes of a record's path, root to terminal, and (when the whole tree is
+// too large to draw) the tree of just those nodes.
+std::string chain_json(const ftec::Dag& dag, const std::vector<ftec::RecordEntry>& record,
+                       std::size_t path_id, std::size_t limit) {
+    std::set<std::size_t> ids{dag.root(), terminal_of(dag, path_id)};
+    for (const auto& e : record) ids.insert(e.node);
+    std::ostringstream out;
+    out << ",\"terminal\":" << terminal_of(dag, path_id) << ",\"chain\":[";
+    bool first = true;
+    for (const auto id : ids) { out << (first ? "" : ",") << id; first = false; }
+    out << ']';
+    if (dag.nodes.size() > limit) out << ",\"chain_tree\":" << tree_json(dag, limit, &ids);
+    return out.str();
+}
+
+void write_result_json(const std::filesystem::path& file, const ftec::Dag& dag,
+                       const ftec::VerifyResult& result, std::size_t limit) {
+    std::ostringstream out;
+    out << "{\"tree\":" << tree_json(dag, limit);
+
+    // Every circuit, as a flat list of operations, to draw.
+    out << ",\"circuits\":{";
+    std::set<std::string> done;
+    bool first = true;
+    for (const auto& node : dag.nodes) {
+        if (node.kind != ftec::DagNode::Kind::Se || !done.insert(node.circuit.se_name).second) continue;
+        const auto& c = node.circuit;
+        ftec::QasmProgram program;
+        try { program = ftec::parse_qasm_file(c.qasm); } catch (const std::exception&) { continue; }
+        if (!first) out << ',';
+        first = false;
+        out << json_string(c.se_name) << ":{\"file\":" << json_string(c.qasm.filename().string())
+            << ",\"registers\":[";
+        for (std::size_t i = 0; i < program.qubits.size(); ++i) {
+            const auto& reg = program.qubits[i];
+            const char* role = reg.name == c.data_qubits ? "data"
+                             : reg.name == c.syndrome_qubits ? "syndrome"
+                             : c.flag_qubits && reg.name == *c.flag_qubits ? "flag" : "other";
+            out << (i ? "," : "") << "{\"name\":" << json_string(reg.name) << ",\"width\":" << reg.width
+                << ",\"role\":\"" << role << "\"}";
+        }
+        out << "],\"ops\":[";
+        for (std::size_t i = 0; i < program.instructions.size(); ++i) {
+            const auto& in = program.instructions[i];
+            const char* kind = in.kind == ftec::QasmInstruction::Kind::Gate ? "gate"
+                             : in.kind == ftec::QasmInstruction::Kind::Measure ? "measure"
+                             : in.kind == ftec::QasmInstruction::Kind::Reset ? "reset" : "barrier";
+            out << (i ? "," : "") << "{\"kind\":\"" << kind << "\",\"gate\":" << json_string(in.gate)
+                << ",\"qubits\":[";
+            for (std::size_t q = 0; q < in.qubits.size(); ++q) {
+                out << (q ? "," : "")
+                    << json_string(in.qubits[q].reg + "[" + std::to_string(in.qubits[q].index) + "]");
+            }
+            out << ']';
+            if (in.kind == ftec::QasmInstruction::Kind::Measure) {
+                out << ",\"target\":" << json_string(in.target.reg + "[" + std::to_string(in.target.index) + "]");
+            }
+            out << '}';
+        }
+        out << "]}";
+    }
+    out << '}';
+
+    // Correctability: the first record of every failing path.
+    out << ",\"correctability\":[";
+    std::map<std::size_t, std::size_t> per_path;
+    for (const auto& f : result.failures) ++per_path[f.path_id];
+    std::set<std::size_t> shown;
+    first = true;
+    for (const auto& f : result.failures) {
+        if (!shown.insert(f.path_id).second) continue;
+        if (!first) out << ',';
+        first = false;
+        out << "{\"path\":" << f.path_id << ",\"action\":" << json_string(f.terminal_action)
+            << ",\"t\":" << f.failure.fault_count << ",\"records\":" << per_path[f.path_id]
+            << ",\"detail\":" << json_string(f.failure.detail) << ",\"record\":" << record_json(f.record)
+            << chain_json(dag, f.record, f.path_id, limit) << ",\"witnesses\":[";
+        for (std::size_t i = 0; i < f.explained.size(); ++i) out << (i ? "," : "") << provenance_json(f.explained[i]);
+        out << "]}";
+    }
+    out << ']';
+
+    // Control-flow bugs: one record per path.
+    out << ",\"validity\":[";
+    shown.clear();
+    first = true;
+    for (const auto& v : result.validity_failures) {
+        if (!shown.insert(v.path_id).second) continue;
+        if (!first) out << ',';
+        first = false;
+        out << "{\"path\":" << v.path_id << ",\"action\":" << json_string(v.terminal_action)
+            << ",\"reason\":" << json_string(v.reason) << ",\"why1\":" << json_string(v.why1)
+            << ",\"why2\":" << json_string(v.why2) << ",\"why3\":" << json_string(v.why3)
+            << ",\"detected\":" << v.detected << ",\"t\":" << result.tau
+            << ",\"record\":" << record_json(v.record) << chain_json(dag, v.record, v.path_id, limit)
+            << ",\"rounds\":[";
+        for (std::size_t i = 0; i < v.rounds.size(); ++i) {
+            const auto& r = v.rounds[i];
+            out << (i ? "," : "") << "{\"flagged\":" << (r.flagged ? "true" : "false")
+                << ",\"counted\":" << r.counted << ",\"steps\":[";
+            for (std::size_t j = 0; j < r.steps.size(); ++j) out << (j ? "," : "") << r.steps[j];
+            out << "]}";
+        }
+        out << "],\"split\":[";
+        for (std::size_t i = 0; i < v.split.size(); ++i) out << (i ? "," : "") << provenance_json(v.split[i]);
+        out << ']';
+        if (v.heavy) out << ",\"heavy\":" << provenance_json(*v.heavy);
+        out << '}';
+    }
+    out << ']';
+
+    // Flag bugs.
+    out << ",\"flags\":[";
+    for (std::size_t i = 0; i < result.flag_failures.size(); ++i) {
+        const auto& f = result.flag_failures[i];
+        out << (i ? "," : "") << "{\"se\":" << json_string(f.se_name) << ",\"k\":" << f.k
+            << ",\"problem\":" << json_string(f.problem) << ",\"records\":" << f.records
+            << ",\"paths\":" << f.paths.size() << ",\"path\":" << f.path_id
+            << ",\"record\":" << record_json(f.record) << chain_json(dag, f.record, f.path_id, limit)
+            << ",\"witness\":" << provenance_json(f.witness) << '}';
+    }
+    out << "]}";
+
+    std::ofstream file_out(file);
+    if (!file_out) throw std::runtime_error("cannot write " + file.string());
+    file_out << out.str() << "\n";
 }
 
 } // namespace
@@ -219,6 +429,7 @@ int main(int argc, char** argv) {
     std::optional<std::size_t> bound;
     std::size_t                max_paths = 5000;
     std::optional<std::size_t> tree_limit;
+    std::optional<std::filesystem::path> json_out;
     bool                       skip_circuit_check = false;
     bool                       by_path = false;
     ftec::VerifyOptions        options;
@@ -248,6 +459,11 @@ int main(int argc, char** argv) {
             by_path = true;
         } else if (arg == "--decode-needs-cond12") {
             options.decode_may_use_cond3 = false;
+        } else if (arg == "--explain") {
+            options.explain = true;
+        } else if (arg.rfind("--json-out=", 0) == 0) {
+            json_out = arg.substr(11);
+            options.explain = true;
         } else if (arg == "--tree") {
             tree_limit = 2000;
         } else if (arg.rfind("--tree=", 0) == 0) {
@@ -293,7 +509,7 @@ int main(int argc, char** argv) {
         };
 
         if (tree_limit) {
-            print_tree_json(dag, *tree_limit);
+            std::cout << tree_json(dag, *tree_limit) << "\n";
             return 0;
         }
 
@@ -355,6 +571,9 @@ int main(int argc, char** argv) {
                 if (!failure.failure.detail.empty()) {
                     std::cout << "        " << failure.failure.detail << "\n";
                 }
+                for (std::size_t i = 0; i < failure.explained.size(); ++i) {
+                    print_provenance("E" + std::to_string(i + 1), failure.explained[i], failure.record);
+                }
             }
         }
 
@@ -375,12 +594,16 @@ int main(int argc, char** argv) {
                     std::cout << "  path " << v.path_id << "  " << v.terminal_action
                               << "  record=" << v.record_string() << "\n        " << v.reason
                               << "\n";
+                    for (std::size_t i = 0; i < v.split.size(); ++i) {
+                        print_provenance("Cond 1 error " + std::to_string(i + 1), v.split[i], v.record);
+                    }
+                    if (v.heavy) print_provenance("Cond 3 error", *v.heavy, v.record);
                 }
             }
             if (by_path) {
                 std::cout << "by path (records satisfying each condition; a record may satisfy several):\n";
                 for (const auto& p : result.by_path) {
-                    ftec::PathFailure f{p.path_id, p.terminal_action, p.example, {}};
+                    ftec::PathFailure f{p.path_id, p.terminal_action, p.example, {}, {}};
                     std::cout << "  path " << p.path_id << "  " << p.terminal_action << "  records " << p.records
                               << "  Cond1 " << p.cond1 << "  Cond2 " << p.cond2 << "  Cond3 " << p.cond3
                               << "  none " << p.failing << "  e.g. " << f.record_string() << "\n";
@@ -404,6 +627,7 @@ int main(int argc, char** argv) {
                               << "\n        needed by " << f.records << " record(s) on "
                               << f.paths.size() << " path(s), e.g. path " << f.path_id
                               << "  record=" << f.record_string() << "\n";
+                    if (options.explain && f.k > 0) print_provenance("error", f.witness, {}, f.se_name);
                 }
             }
             std::cout << "validity time   : " << std::fixed << std::setprecision(3)
@@ -418,6 +642,7 @@ int main(int argc, char** argv) {
             std::cout << "\nFTEC            : "
                       << (result.clean() && result.valid() ? "accepted" : "rejected") << "\n";
         }
+        if (json_out) write_result_json(*json_out, dag, result, 1000);
         report_cost(traversal);
         return 0;
     } catch (const std::exception& error) {
