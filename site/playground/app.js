@@ -8,6 +8,8 @@
   // (CB18 [[17,1,5]]: 121 s native, 310 s in WebAssembly).
   const WASM_SLOWDOWN = 2.6;
   const STORE_KEY = 'fpv-playground-v1';
+  // The largest decision tree the playground draws, in tree nodes.
+  const TREE_LIMIT = 1000;
 
   const $ = id => document.getElementById(id);
   const plist = $('plist'), tabs = $('tabs'), editor = $('editor'), entrySel = $('entry');
@@ -18,6 +20,8 @@
   let current = null;               // workspace name
   let currentFile = null;
   let worker = null, workerReady = false, running = false, timer = null;
+  const treeView = $('tree-view');
+  let treeRun = false, treeOut = [];
 
   // --- persistence (best effort; the page works without it) --------------------
   function load() {
@@ -311,14 +315,29 @@
       if (statusEl.textContent.startsWith('Loading')) statusEl.textContent = 'Ready';
       updateRunButton();
     } else if (data.type === 'out') {
+      if (treeRun && !data.err) { treeOut.push(data.text); return; }
       let cls = data.err ? 'err' : '';
       if (/^\d+ unprotected path/.test(data.text) || /^(control-flow bugs|flag bugs\s*):\s*[1-9]/.test(data.text) || /^FTEC\s*: rejected/.test(data.text)) cls = 'bad';
       else if (/^no unprotected path found/.test(data.text) || /^(control-flow bugs|flag bugs\s*):\s*0 /.test(data.text) || /^FTEC\s*: accepted/.test(data.text)) cls = 'good';
       line(data.text, cls);
     } else if (data.type === 'done') {
+      if (treeRun && data.rc === 0 && showTree()) {
+        finishRun('Done');
+        return;
+      }
+      treeOut.forEach(t => line(t));
       line(`\n[exit ${data.rc}, ${(data.ms / 1000).toFixed(2)} s in the browser]`, 'sys');
       finishRun(data.rc === 0 ? 'Done' : 'Finished with errors');
     }
+  }
+
+  function showTree() {
+    let data;
+    try { data = JSON.parse(treeOut.join('\n')); } catch (_) { return false; }
+    out.hidden = true;
+    treeView.hidden = false;
+    window.DecisionTree.render(treeView, data);
+    return true;
   }
 
   function line(text, cls) {
@@ -339,11 +358,16 @@
     if (!ws || !ws.entry) return;
     const args = ['ftec-verify', '/w/' + ws.entry, '--fqcv=' + $('fqcv').value];
     if ($('first').checked) args.push('--first');
-    if ($('dag').checked) args.push('--dag');
+    treeRun = $('tree').checked;
+    treeOut = [];
+    if (treeRun) args.push('--tree=' + TREE_LIMIT);
     if ($('skip-se').checked) args.push('--skip-circuit-check');
     if ($('no-input').checked) args.push('--no-input-errors');
 
     out.textContent = '';
+    out.hidden = false;
+    treeView.hidden = true;
+    treeView.textContent = '';
     line('$ ' + args.map(a => /[\s\[\]^]/.test(a) ? `"${a}"` : a).join(' ').replace('/w/', ''), 'sys');
     running = true;
     updateRunButton();

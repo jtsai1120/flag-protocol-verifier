@@ -173,7 +173,7 @@ cd flag-protocol-verifier</code></pre>
           <tr><td><code>--bound=N</code></td><td>searched</td><td>Fix the bounded-model-checking bound. Without it, the bound doubles from 16 until the symbolic expansion is complete.</td></tr>
           <tr><td><code>--max-paths=N</code></td><td><code>5000</code></td><td>Give up past this many symbolic paths.</td></tr>
           <tr><td><code>--first</code></td><td>off</td><td>Stop at the first unprotected path.</td></tr>
-          <tr><td><code>--dag</code></td><td>off</td><td>Print the merged path structure and exit without verifying.</td></tr>
+          <tr><td><code>--tree[=N]</code></td><td>off</td><td>Print the decision tree (the merged symbolic paths, with their guards) as JSON and exit without verifying. Past <i>N</i> nodes (default 2000) only its size is printed. The playground's “Show decision tree only” draws it.</td></tr>
           <tr><td><code>--no-input-errors</code></td><td>off</td><td>Start every execution from an error-free input (<i>r</i> = 0).</td></tr>
           <tr><td><code>--no-validity</code></td><td>off</td><td>Skip the protocol validity check.</td></tr>
           <tr><td><code>--skip-circuit-check</code></td><td>off</td><td>Verify the circuits as written even when they are not valid (see below).</td></tr>

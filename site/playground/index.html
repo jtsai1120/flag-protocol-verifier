@@ -50,7 +50,7 @@
         </select>
       </label>
       <label><input type="checkbox" id="first"> Stop at first failure</label>
-      <label><input type="checkbox" id="dag"> Structure only</label>
+      <label title="Draw the decision tree of the protocol instead of verifying it"><input type="checkbox" id="tree"> Show decision tree only</label>
       <label title="Verify the circuits as written, even if they are not valid"><input type="checkbox" id="skip-se"> Skip the circuit check</label>
       <label title="Start every run from an error-free input (r = 0)"><input type="checkbox" id="no-input"> No input errors</label>
     </div>
@@ -64,9 +64,11 @@
       <span class="status" id="status" role="status">Loading the verifier…</span>
     </div>
     <pre class="console" id="console" aria-live="polite"></pre>
+    <div class="tree-view" id="tree-view" hidden></div>
   </section>
 </main>
 
+<script src="tree.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

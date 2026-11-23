@@ -68,7 +68,8 @@ void usage(const char* argv0) {
         << "  --bound=N        fix the BMC bound instead of searching for one\n"
         << "  --max-paths=N    give up past this many symbolic paths (default 5000)\n"
         << "  --first          stop at the first unprotected path\n"
-        << "  --dag            print the merged path structure and exit\n"
+        << "  --tree[=N]       print the decision tree as JSON and exit; past N nodes\n"
+        << "                   (default 2000) print only its size\n"
         << "  --no-input-errors\n"
         << "                   start every run from an error-free input (r = 0)\n"
         << "  --no-validity    skip the protocol validity check (Def. 3.9)\n"
@@ -117,25 +118,92 @@ Expansion expand(const std::filesystem::path& source, std::optional<std::size_t>
         "; pass --bound=N to choose one explicitly");
 }
 
-void print_dag(const ftec::Dag& dag) {
-    std::map<ftec::DagNode::Kind, std::size_t> kinds;
-    for (const auto& node : dag.nodes) ++kinds[node.kind];
-
-    std::cout << "protocol   : " << dag.protocol << "\n"
-              << "code       : [[" << dag.code.n << ',' << dag.code.k << ',' << dag.code.d
-              << "]], tau = " << dag.code.fault_budget() << "\n"
-              << "paths      : " << dag.path_count << "\n"
-              << "nodes      : " << dag.nodes.size() << " ("
-              << kinds[ftec::DagNode::Kind::Se] << " SE, "
-              << kinds[ftec::DagNode::Kind::Terminal] << " terminal)\n"
-              << "edges      : " << dag.edges.size() << "\n\n";
-
-    for (const auto& node : dag.nodes) {
-        if (node.kind != ftec::DagNode::Kind::Se) continue;
-        std::cout << "  #" << node.id << "  round " << node.round << '.' << node.invocation
-                  << ' ' << node.phase << "  " << node.circuit.se_name << "  ("
-                  << node.circuit.qasm.filename().string() << ")\n";
+std::string json_string(const std::string& text) {
+    std::string out = "\"";
+    for (const unsigned char c : text) {
+        switch (c) {
+        case '"':  out += "\\\""; break;
+        case '\\': out += "\\\\"; break;
+        case '\n': out += "\\n"; break;
+        case '\t': out += "\\t"; break;
+        default:
+            if (c < 0x20) {
+                char buffer[8];
+                std::snprintf(buffer, sizeof buffer, "\\u%04x", c);
+                out += buffer;
+            } else {
+                out += static_cast<char>(c);
+            }
+        }
     }
+    return out + "\"";
+}
+
+// The decision tree (the merged symbolic paths) as one JSON object, for the
+// playground to draw. Past `limit` nodes only the counts are written: a tree
+// that large cannot be read as a picture anyway.
+void print_tree_json(const ftec::Dag& dag, std::size_t limit) {
+    std::ostringstream out;
+    out << "{\"protocol\":" << json_string(dag.protocol) << ",\"code\":\"[[" << dag.code.n << ','
+        << dag.code.k << ',' << dag.code.d << "]]\",\"tau\":" << dag.code.fault_budget()
+        << ",\"paths\":" << dag.path_count << ",\"node_count\":" << dag.nodes.size()
+        << ",\"limit\":" << limit;
+    if (dag.nodes.size() > limit) {
+        out << ",\"too_large\":true}";
+        std::cout << out.str() << "\n";
+        return;
+    }
+
+    // An SE node's outcomes are named after its position on the path: the
+    // k-th SE of a path writes id_k.s (and id_k.f when flagged).
+    std::vector<std::size_t> depth(dag.nodes.size(), 0);
+    for (const auto& edge : dag.edges) depth[edge.to] = depth[edge.from] + 1;
+
+    out << ",\"nodes\":[";
+    for (std::size_t i = 0; i < dag.nodes.size(); ++i) {
+        const auto& node = dag.nodes[i];
+        if (i) out << ',';
+        out << "{\"id\":" << node.id;
+        switch (node.kind) {
+        case ftec::DagNode::Kind::Start:
+            out << ",\"kind\":\"start\"";
+            break;
+        case ftec::DagNode::Kind::Se:
+            out << ",\"kind\":\"se\",\"name\":" << json_string(node.circuit.se_name)
+                << ",\"phase\":" << json_string(node.phase) << ",\"round\":" << node.round
+                << ",\"invocation\":" << node.invocation << ",\"step\":" << depth[i]
+                << ",\"flagged\":" << (node.circuit.flag_qubits ? "true" : "false")
+                << ",\"g\":[";
+            for (std::size_t g = 0; g < node.circuit.measures.size(); ++g) {
+                if (g) out << ',';
+                const bool negated = g < node.circuit.negated.size() && node.circuit.negated[g];
+                out << json_string((negated ? "-" : "") + node.circuit.measures[g]);
+            }
+            out << ']';
+            break;
+        case ftec::DagNode::Kind::Terminal:
+            out << ",\"kind\":\"terminal\",\"path\":" << node.path_id
+                << ",\"action\":" << json_string(node.terminal_action);
+            if (node.terminal_condition) out << ",\"condition\":" << *node.terminal_condition;
+            if (node.decode_record) out << ",\"record\":" << json_string(*node.decode_record);
+            break;
+        }
+        out << '}';
+    }
+    out << "],\"edges\":[";
+    for (std::size_t i = 0; i < dag.edges.size(); ++i) {
+        const auto& edge = dag.edges[i];
+        if (i) out << ',';
+        out << "{\"from\":" << edge.from << ",\"to\":" << edge.to << ",\"guards\":[";
+        for (std::size_t g = 0; g < edge.guards.size(); ++g) {
+            if (g) out << ',';
+            out << "{\"expr\":" << json_string(edge.guards[g].expression)
+                << ",\"expected\":" << (edge.guards[g].expected ? "true" : "false") << '}';
+        }
+        out << "]}";
+    }
+    out << "]}";
+    std::cout << out.str() << "\n";
 }
 
 } // namespace
@@ -150,7 +218,7 @@ int main(int argc, char** argv) {
     ftec::SpbddOptions         spbdd_options;
     std::optional<std::size_t> bound;
     std::size_t                max_paths = 5000;
-    bool                       dag_only  = false;
+    std::optional<std::size_t> tree_limit;
     bool                       skip_circuit_check = false;
     bool                       by_path = false;
     ftec::VerifyOptions        options;
@@ -180,8 +248,10 @@ int main(int argc, char** argv) {
             by_path = true;
         } else if (arg == "--decode-needs-cond12") {
             options.decode_may_use_cond3 = false;
-        } else if (arg == "--dag") {
-            dag_only = true;
+        } else if (arg == "--tree") {
+            tree_limit = 2000;
+        } else if (arg.rfind("--tree=", 0) == 0) {
+            tree_limit = std::stoull(arg.substr(7));
         } else if (arg.rfind("--", 0) == 0) {
             std::cerr << "error: unknown option " << arg << "\n";
             usage(argv[0]);
@@ -222,9 +292,8 @@ int main(int argc, char** argv) {
                       << "\n";
         };
 
-        if (dag_only) {
-            print_dag(dag);
-            report_cost(std::chrono::steady_clock::duration::zero());
+        if (tree_limit) {
+            print_tree_json(dag, *tree_limit);
             return 0;
         }
 

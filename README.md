@@ -87,7 +87,7 @@ What `make` does:
 | `--bound=N` | searched | Fix the BMC bound; without it the bound doubles from 16 until the expansion is complete (up to 65536) |
 | `--max-paths=N` | `5000` | Give up past this many symbolic paths |
 | `--first` | off | Stop at the first unprotected path |
-| `--dag` | off | Print the merged path structure and exit without verifying |
+| `--tree[=N]` | off | Print the decision tree (the merged symbolic paths, with their guards) as JSON and exit without verifying; past N nodes (default 2000) print only its size. The playground draws it |
 | `--no-input-errors` | off | Start every execution from an error-free input (r = 0) |
 | `--no-validity` | off | Skip the protocol validity check |
 | `--skip-circuit-check` | off | Verify the circuits as written even when they are not valid |

@@ -240,6 +240,25 @@ input[type="number"] { width: 6.5rem; }
 .console .sys { color: var(--muted); }
 .console .bad { color: var(--x); font-weight: 600; }
 .console .good { color: var(--ok); font-weight: 600; }
+.tree-view { flex: none; display: flex; flex-direction: column; height: calc(100vh - 7rem); min-height: 20rem; position: sticky; top: 0; background: var(--panel); }
+.tree-view[hidden], .console[hidden] { display: none; }
+.tree-head { display: flex; align-items: center; gap: 0.8rem; padding: 0.45rem 0.9rem; border-bottom: 1px solid var(--rule); font-size: 0.9rem; color: var(--muted); }
+.tree-head span { flex: 1; }
+.tree-too-large { padding: 0.9rem; color: var(--flag); }
+.tree-svg { flex: 1; width: 100%; min-height: 0; overflow: hidden; cursor: grab; touch-action: none; user-select: none; }
+.tree-svg.dragging { cursor: grabbing; }
+.tree-svg .edge { fill: none; stroke: var(--muted); stroke-width: 1.2; }
+.tree-svg .arrow { fill: var(--muted); }
+.tree-svg .guard { font: 11px var(--serif); fill: var(--ink); }
+.tree-svg .node rect, .tree-svg .node circle { stroke-width: 1.3; }
+.tree-svg .n-start rect, .tree-svg .n-end rect { fill: rgba(180, 35, 44, 0.13); stroke: var(--x); }
+.tree-svg .n-af rect { fill: rgba(154, 100, 0, 0.13); stroke: var(--flag); }
+.tree-svg .n-ta rect { fill: rgba(31, 79, 209, 0.11); stroke: var(--z); }
+.tree-svg .n-decode circle { fill: rgba(29, 122, 70, 0.13); stroke: var(--ok); }
+.tree-svg .se-name { font: 12px var(--mono); fill: var(--ink); }
+.tree-svg .se-vars { font: 11px var(--serif); fill: var(--muted); }
+.tree-svg .term { font: 600 12px var(--serif); fill: var(--ink); }
+.tree-svg .term-sub { font: 11px var(--serif); fill: var(--muted); }
 .status { font-size: 0.9rem; color: var(--muted); }
 .status.running { color: var(--flag); }
 
