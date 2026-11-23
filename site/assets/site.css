@@ -168,8 +168,18 @@ footer.site a { color: var(--muted); }
 body.app { min-height: 100vh; display: flex; flex-direction: column; }
 .app-main {
   flex: 1; display: grid; gap: 0; min-height: 0;
-  grid-template-columns: 17rem minmax(0, 1fr) minmax(0, 0.95fr);
+  grid-template-columns: 17rem minmax(0, 1fr) var(--out-width, minmax(0, 0.95fr));
 }
+.pane.out { position: relative; }
+.col-resizer {
+  position: absolute; left: -4px; top: 0; bottom: 0; width: 8px; z-index: 5;
+  cursor: col-resize; touch-action: none;
+}
+.col-resizer:hover, .col-resizer:focus-visible, .col-resizer.active, .row-resizer:hover, .row-resizer:focus-visible, .row-resizer.active {
+  background: color-mix(in srgb, var(--z) 35%, transparent); outline: none;
+}
+.row-resizer { flex: none; height: 7px; margin: -3px 0; position: relative; z-index: 5; cursor: row-resize; touch-action: none; }
+body.resizing, body.resizing * { user-select: none !important; }
 .app-main.two { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
 .pane { min-width: 0; display: flex; flex-direction: column; border-right: 1px solid var(--rule); }
 .pane:last-child { border-right: 0; }
@@ -302,9 +312,9 @@ input[type="number"] { width: 6.5rem; }
 .cex-view[hidden] { display: none; }
 .cex-bar { padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--rule); font-size: 0.92rem; }
 .cex-bar select { max-width: 100%; }
-.cex-visual { flex: 1.1; min-height: 12rem; display: flex; }
+.cex-visual { flex: 1.1; min-height: 8rem; display: flex; }
 .cex-visual > .tree-view.inner { flex: 1; height: auto; position: static; min-height: 0; }
-.cex-detail { flex: 1; overflow: auto; padding: 0.4rem 0.9rem 1.2rem; border-top: 1px solid var(--rule); font-size: 0.93rem; }
+.cex-detail { flex: 1; min-height: 6rem; overflow: auto; padding: 0.4rem 0.9rem 1.2rem; border-top: 1px solid var(--rule); font-size: 0.93rem; }
 .cex-detail h3 { font-size: 1rem; margin: 0.5rem 0; }
 .cex-detail h4 { font-size: 0.95rem; margin: 0.6rem 0 0.3rem; }
 .cex-detail p { margin: 0.35rem 0; }
@@ -332,6 +342,7 @@ details.ref td:first-child { font-family: var(--mono); font-size: 0.78rem; white
 
 @media (max-width: 1100px) {
   .app-main { grid-template-columns: 14rem minmax(0, 1fr); }
+  .col-resizer { display: none; }
   .app-main > .pane.out { grid-column: 1 / -1; border-top: 1px solid var(--rule); }
 }
 @media (max-width: 720px) {
