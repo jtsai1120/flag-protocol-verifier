@@ -269,7 +269,7 @@ after a disagreement only the new round.
 | Condition | Checked |
 |---|---|
 | 1 | the record detects w ≥ t faults (input errors counted), and every error of the levels with r + s = t has the same ideal syndrome (no generator splits it; φ_CF1 of Eq. 14) |
-| 2 | at least m < t detected faults, then t − m + 1 identical, unflagged full rounds, which the guards must force: every record of the same FPDL path whose rounds before those t − m + 1 prove exactly m faults (at least t when m = t − 1 and the record proves t) has them |
+| 2 | the rounds before the last t − m + 1 detect m < t faults (m is what the record gives, Sec. 4.2.2; a record that has detected t before them is not a Cond 2 record), then t − m + 1 identical, unflagged full rounds, which the guards must force: every record of the same FPDL path whose rounds before those t − m + 1 detect exactly m faults has them |
 | 3 | every error from input weight r and s faults, r + s ≤ t, is within weight s of the code space |
 
 A `decode(...)` terminal may be settled by any condition: Thm. 3.10 builds the

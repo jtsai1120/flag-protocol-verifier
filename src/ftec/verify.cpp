@@ -588,9 +588,11 @@ private:
     // can merge executions such a tree keeps apart (a guard on a counter), so:
     //   * Cond 1 and Cond 3 are checked record by record (Eq. 14 and the
     //     Cond 3 query quantify over the executions of one record anyway);
-    //   * Cond 2 with m = min(c, t - 1) is checked for the class of records of
-    //     the path whose rounds before the last t - m + 1 prove exactly c
-    //     circuit faults (at least t for c = t). The class is what a guard on
+    //   * Cond 2 is checked for the class of records of the path whose rounds
+    //     before the last t - m + 1 detect exactly m < t faults: m is the
+    //     detected-fault lower bound the record gives (Sec. 4.2.2), not a
+    //     number to choose, so a record that has detected t faults before
+    //     those rounds is not a Cond 2 record at all. The class is what a guard on
     //     the faults detected so far can tell apart; Cond 2 holds for it when
     //     EVERY record in it ends in t - m + 1 identical, unflagged full
     //     rounds, so the guards, not chance, force the repetition.
@@ -647,12 +649,12 @@ private:
         std::uint32_t with_form = 0;
         const std::size_t n = ex.rounds.size();
         const std::size_t have = repeated_suffix(ex);
-        for (int c = 0; c <= t && t >= 1; ++c) {
-            const int m = std::min(c, t - 1);
+        for (int c = 0; c < t; ++c) {
+            const int m = c;
             const std::size_t need = static_cast<std::size_t>(t - m + 1);
             const std::size_t prefix = n >= need ? n - need : n;
             const int wp = ex.w_upto[prefix];
-            if (c < t ? wp != c : wp < t) continue;
+            if (wp != c) continue;
             ClassState& cls = path.classes[c];
             ++cls.records;
             const bool form = ex.readable && n >= need && have >= need;
@@ -716,7 +718,7 @@ private:
             }
             for (auto& [c, cls] : path.classes) {
                 if (!(forced >> c & 1)) continue;
-                const int k = t - std::min(c, t - 1);
+                const int k = t - c;
                 for (const auto& [key, slot] : cls.flags) {
                     const CircuitRef& circuit = *slot.first;
                     std::optional<std::string> problem;
