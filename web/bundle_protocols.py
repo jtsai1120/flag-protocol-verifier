@@ -35,7 +35,7 @@ NATIVE_SECONDS = {
 # The run fields the playground shows; the same ones the results page's
 # verdict columns read.
 VERDICT_FIELDS = ("circuit_valid", "circuit_problems", "circuit_warnings", "circuits_skipped",
-                  "invalid", "invalid_paths", "flag_bugs", "failures", "min_t", "ftec", "status")
+                  "invalid", "invalid_paths", "invalid_paths_strict", "flag_bugs", "failures", "min_t", "ftec", "status")
 
 
 def main():

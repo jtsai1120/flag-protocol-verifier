@@ -60,7 +60,7 @@
     }
     if (v.failures !== undefined) {
       out.push(v.failures === 0 ? ['correctable', true]
-        : [`not correctable (${plural(v.failures, 'record')} fail, t = ${v.min_t})`, false]);
+        : [`not correctable (${plural(v.failures, 'path')} fail, t = ${v.min_t})`, false]);
     }
     return out;
   }

@@ -89,17 +89,22 @@
       get: r => r.invalid_paths === undefined ? null : r.invalid_paths,
       show: r => r.invalid_paths === undefined ? null : r.invalid_paths === 0 ? ['0', 'v-good']
         : [`${r.invalid_paths} path${r.invalid_paths > 1 ? 's' : ''} (${count(r.invalid)} record${r.invalid > 1 ? 's' : ''})`, 'v-bad'],
-      def: 'Terminating paths that satisfy none of Conditions 1–3 of Def. 3.9 (a path satisfies a condition when every record on it does). A decoding path may use any of them; an ending path applies no correction, so it needs Condition 3. The count in brackets is the records on those paths.' },
+      def: 'Paths with a measurement record that satisfies none of Conditions 1–3 of Def. 3.9 (each record is a path of the finest decision tree; Condition 2 must be forced by the guards). A decoding record may use any condition; an ending one applies no correction, so it needs Condition 3. The count in brackets is the records that fail.' },
+    { group: 'Verdict', key: 'cf_bugs_strict', label: 'Control-flow bugs (no Cond 3 at decode)', kind: 'verdict', validity: true,
+      get: r => r.invalid_paths_strict === undefined ? null : r.invalid_paths_strict,
+      show: r => r.invalid_paths_strict === undefined ? null : r.invalid_paths_strict === 0 ? ['0', 'v-good']
+        : [`${r.invalid_paths_strict} path${r.invalid_paths_strict > 1 ? 's' : ''}`, 'v-bad'],
+      def: 'The same count when a decode() terminal may not be settled by Condition 3, as in the paper’s experiments (--decode-needs-cond12).' },
     { group: 'Verdict', key: 'flag_bugs', label: 'Flag bugs', kind: 'verdict', validity: true,
       get: r => r.flag_bugs === undefined ? null : r.flag_bugs,
       show: r => r.flag_bugs === undefined ? null : r.flag_bugs === 0 ? ['0', 'v-good']
         : [`${r.flag_bugs} circuit${r.flag_bugs > 1 ? 's' : ''}`, 'v-bad'],
-      def: 'Circuits in the repeated suffix of a Condition 2 path that fail the (t − m)-flag condition (Def. 3.9 (2), Def. 3.7), whichever condition settles the path.' },
+      def: 'Circuits in the repeated suffix of a Condition 2 path that fail the (t − m)-flag condition (Def. 3.9 (2), Def. 3.7), whichever condition settles its records.' },
 
     { group: 'Size', key: 'paths', label: 'Paths', kind: 'count', get: r => num(r.paths), def: 'Symbolic execution paths reached.' },
     { group: 'Size', key: 'records', label: 'Terminal records', kind: 'count', get: r => num(r.records), def: 'Distinct measurement records reaching a terminal.' },
     { group: 'Size', key: 'circuits', label: 'Circuits run', kind: 'count', get: r => num(r.circuits), def: 'Extraction circuits actually simulated.' },
-    { group: 'Size', key: 'cond2', label: 'Paths by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Decoding paths that Condition 1 does not settle and Condition 2 does.' },
+    { group: 'Size', key: 'cond2', label: 'Records by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Decoding records that Condition 1 does not settle and Condition 2 does.' },
     { group: 'Size', key: 'fqcv_setsize_max', label: 'Largest error set', kind: 'count', get: r => num(r.fqcv_setsize_max), def: 'Elements of the largest set given to the E1E2 query.', fmt: big },
   ];
   // Columns follow the order of the checks: circuit validity, then protocol

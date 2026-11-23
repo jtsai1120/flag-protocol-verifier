@@ -158,10 +158,10 @@ method, 2 vCPU with two runs in parallel:
 
 | Protocol | Records | Time | Peak memory | Verdict |
 |---|---|---|---|---|
-| CB18 [[25,1,5]] 5×5 | 1,938,025 | 332 s | 378 MiB | accepted |
-| CB18 [[30,1,5]] 5×6 | 2,997,132 | 719 s | 496 MiB | accepted |
-| CB18 [[35,1,5]] 5×7 | 4,286,296 | 1,368 s | 639 MiB | accepted |
-| CB18 [[45,1,5]] 5×9 | 7,554,651 | 3,782 s | 1,126 MiB | accepted |
+| CB18 [[25,1,5]] 5×5 | 1,938,025 | 290 s | 378 MiB | accepted |
+| CB18 [[30,1,5]] 5×6 | 2,997,132 | 609 s | 497 MiB | accepted |
+| CB18 [[35,1,5]] 5×7 | 4,286,296 | 1,139 s | 638 MiB | accepted |
+| CB18 [[45,1,5]] 5×9 | 7,554,651 | 3,782 s | 1,126 MiB | accepted (earlier checks, not rerun) |
 | CB18 [[49,1,7]] 7×7 | — | killed after 6,791 s | over 5.7 GiB | out of memory |
 
 The bottleneck is state propagation and fault injection before the final
@@ -199,14 +199,15 @@ reset; the data start in the code space.
   comes out as itself times a stabilizer and never touches a qubit while that
   qubit is measured or reset.
 
-Outcomes are recorded as flips relative to the error-free outcome, so a
-measurement that deterministically reads 1, or a logical operator that comes
-out with a minus sign, is reported as a warning only. A syndrome bit that
-reads 1 by design is declared with a minus sign in `g:`, as `-[...]`: the bit
-measures minus the code's stabilizer with those letters, and the warning then
-goes away (a `-[...]` row whose bit reads 0 is warned about instead). The
-protocol's branch guards then see that bit as the circuit reads it, 1 when
-nothing happened; validity and correctability still work with the flips.
+Signs count, as in Thm. 3.4 (stabilizer equality and membership keep their
+signs): a measurement that deterministically reads 1, or a logical operator
+that comes out with a minus sign, makes the circuit invalid. One extension of
+the paper: a syndrome bit that reads 1 by design is declared with a minus sign
+in `g:`, as `-[...]`, which means its readout is inverted (a classical NOT),
+so it reads 0 in the paper's sense; the declaration must match the circuit
+(a `-[...]` row whose bit reads 0 is an error too). The protocol's branch
+guards see that bit as the circuit reads it, 1 when nothing happened;
+validity and correctability work with the flips.
 Bha23 [[7,1,3]] fig6 does this for its three weight-6 flag circuits: with
 `Y = iXZ`, IIIXXXX · IZZIIZZ = −IZZXXYY, so a circuit that measures +IZZXXYY
 reads 1, and the protocol starts with `s = 1` and stops on `s != 1`. Circuits that fail are
@@ -222,38 +223,47 @@ mutated circuits (757 measurements, no disagreement).
 ### 2. Correctability with input errors
 
 The backend keeps one error set per level (r, s): executions that started from
-a data error of weight r and suffered s faults, with r + s ≤ t. At each
-terminal the union of all levels is E_m, and no two errors in it may share a
-syndrome while differing by a logical operator. `--no-input-errors` keeps only
-r = 0.
+a data error of weight r and suffered s faults, with r + s ≤ t (Def. 3.8). At
+each terminal the union of all levels is E_m, and no two errors in it may
+differ by a non-trivial logical operator, E1·E2 ∉ N(S)∖S (Thm. 3.10, Eq. 8).
+Failures are counted by path, as in the paper's Table 1, and every failing
+record is listed. `--no-input-errors` keeps only r = 0.
 
 ### 3. Protocol validity
 
-Protocol validity (Def. 3.10) is checked as in the paper's algorithm, and its
-failures are reported in two kinds, as in the paper's Table 1.
+Protocol validity (Def. 3.9) is checked per terminating execution. Each
+measurement record is regrouped into rounds (a round ends where a generator
+is about to be measured again), and its **detected faults** w are counted
+after CB18 (Secs. 2.2 and 3.1): every SE circuit of a round that raises a flag
+is one, and an unflagged round that disagrees with what is known of the
+syndrome is one, except right after another counted disagreement (it may be
+the same fault seen twice). What is known starts as the trivial syndrome and
+is kept as GF(2) equations over the generators, so a bit that measures a
+product of generators (fig6) is compared too; after a flag nothing earlier is
+trusted, after a disagreement only the new round.
 
-**Control-flow bugs** (Def. 3.9), counted in paths. Every terminal record
-must satisfy the condition its terminal calls for:
+| Condition | Checked |
+|---|---|
+| 1 | w ≥ t, and every error in E_m has the same ideal syndrome (no generator splits E_m; this is φ_CF1 of Eq. 14) |
+| 2 | at least m < t detected faults (m = min(w, t − 1)), then t − m + 1 identical, unflagged full rounds; the guards must force them: every record of the same FPDL path with the same min(w, t) has them |
+| 3 | every error from input weight r and s faults, r + s ≤ t, is within weight s of the code space |
 
-| Terminal | Condition | Checked |
-|---|---|---|
-| `decode(...)` | 1 | Every error in E_m has the same ideal syndrome (no generator splits E_m) |
-| `decode(...)` | 2 | The path ends in t − w + 1 identical, unflagged, full rounds, where w counts the faults its records expose (flags, and changes of syndrome between consecutive unflagged full rounds, the first one compared with the trivial syndrome) |
-| `end()` | 3 | Every error from s faults is within weight s of the code space |
+A `decode(...)` terminal may be settled by any condition: Thm. 3.10 builds the
+decoder, and under Condition 3 it applies no correction. An `end()` terminal
+applies no correction by construction, so only Condition 3 can settle it
+(Sec. 4.1.3). The paper's experiments try only Condition 1 at decoding
+terminals; `--decode-needs-cond12` does the same, and the report always
+shows that count too. An FPDL path is a **control-flow bug** when one of its
+records satisfies no condition; Def. 3.9 speaks of decision-tree paths, and
+an FPDL path can merge executions such a tree keeps apart (a guard on a
+counter), so each record is treated as a path of the finest tree.
 
-Condition 3 is the condition of a terminal that applies the trivial
-correction, so a decoding terminal is not settled by it, and an ending
-terminal is settled by nothing else. Condition 2 is a property of the path:
-every record that reaches the path must end in the same repeated suffix (the
-suffix form). A record that merely happens to repeat its last round does not
-count.
-
-**Flag bugs** (Def. 3.10 (3)), counted in circuits. On every path with the form
-of Condition 2, the circuits of the repeated suffix must satisfy the
-(t − w)-flag condition, whether or not Condition 1 also holds there. The
-k-flag condition of a circuit is checked by running the circuit alone with up
-to k faults: whenever no flag is raised, s faults must leave an error within
-weight s of the code space, and a fault-free run must never raise a flag.
+**Flag bugs** (Def. 3.9 (2)), counted in circuits. Wherever Condition 2 holds,
+the circuits of the repeated suffix must satisfy the (t − m)-flag condition
+(Def. 3.7), whichever condition settles the records. The k-flag condition of
+a circuit is checked by running it alone with up to k faults: whenever no
+flag is raised, s faults must leave an error within weight s of the code
+space, and a fault-free run must never raise a flag.
 
 Each bug is reported with a counterexample: two residual errors the record
 cannot tell apart, an error heavier than its faults allow, or the faults that
@@ -261,38 +271,56 @@ break the flag condition.
 
 ### Results on the bundled protocols
 
-Input errors included; `--fqcv=table`. Control-flow bugs count paths, flag
-bugs count circuits, as in the paper's Table 1.
+Input errors included; `--fqcv=table` (all four methods give the same
+verdicts). Control-flow bugs and correctability failures count paths, flag
+bugs count circuits, as in the paper's Table 1. When circuit validity fails,
+the other checks are not evaluated (Algorithm 1).
 
-| Protocol | Circuits | Control-flow bugs | Flag bugs | Correctable | FTEC |
-|---|---|---|---|---|---|
-| CR17 [[5,1,3]] | valid | 0 | 0 | yes | accepted |
-| LL25 [[5,1,3]] [1,1,1,1]^T | valid | 0 | 0 | yes | accepted |
-| LL25 [[5,1,3]] [2,2] | 6 problems | 0 | 0 | no (t = 1) | rejected |
-| LL25 [[5,1,3]] [2,2]^T | 8 problems | 0 | 0 | no (t = 1) | rejected |
-| LL25 [[5,1,3]] [2,2]^T fix_2 | valid | 0 | 0 | no (t = 1) | rejected |
-| Bha23 [[5,1,3]] | valid | 8 | 0 | yes | rejected |
-| Bha23 [[7,1,3]] fig5 | valid | 6 | 0 | yes | rejected |
-| Bha23 [[7,1,3]] fig6 | valid | 0 | 0 | yes | accepted |
-| CB18 [[17,1,5]], [[25,1,5]], [[30,1,5]], [[35,1,5]], [[45,1,5]] | valid | 0 | 0 | yes | accepted |
-| CB18 [[49,1,7]] | valid | — | — | — | out of memory |
-| Du24 [[17,1,5]] (parallel flags) | valid | 0 | 2 (`F6X_f`, `F6Z_f`) | no (t = 2) | rejected |
-| Du24 [[17,1,5]] plain | valid | 0 | 1 (`FSE_f`) | no (t = 2) | rejected |
-| Du24 [[19,1,5]] | valid | 0 | 1 (`FSE_f`) | yes | rejected |
-| LL25 [[17,1,5]], [[19,1,5]] [1,1,1,...]^T and [[17,1,5]] [2,2,2,1,1]^T | valid | 1 (`end()`, input errors only) | 0 | yes | rejected |
-| LL25 [[19,1,5]] [2,2,2,1,1,1]^T | valid | 1 (`end()`) | 0 | yes | rejected |
+| Protocol | Circuits | Control-flow bugs | without Cond 3 at `decode` | Flag bugs | Correctability failures | FTEC |
+|---|---|---|---|---|---|---|
+| CR17 [[5,1,3]] | valid | 0 | 0 | 0 | 0 | accepted |
+| LL25 [[5,1,3]] [1,1,1,1]^T | valid | 0 | 0 | 0 | 0 | accepted |
+| LL25 [[5,1,3]] [2,2] | 6 problems | — | — | — | — | rejected |
+| LL25 [[5,1,3]] [2,2]^T | 8 problems | — | — | — | — | rejected |
+| LL25 [[5,1,3]] [2,2]^T fix 2 | valid | 0 | 0 | 0 | 1 path (t = 1) | rejected |
+| Bha23 [[5,1,3]] | valid | 4 | 8 | 0 | 0 | rejected |
+| Bha23 [[7,1,3]] fig5 | valid | 0 | 6 | 0 | 0 | accepted |
+| Bha23 [[7,1,3]] fig6 | valid | 0 | 0 | 0 | 0 | accepted |
+| CB18 [[17,1,5]] | valid | 0 | 0 | 0 | 0 | accepted |
+| CB18 [[25,1,5]] | valid | 0 | 0 | 0 | 0 | accepted |
+| CB18 [[30,1,5]] | valid | 0 | 0 | 0 | 0 | accepted |
+| CB18 [[35,1,5]] | valid | 0 | 0 | 0 | 0 | accepted |
+| Du24 [[17,1,5]] | valid | 0 | 0 | 2 | 6 paths (t = 2) | rejected |
+| Du24 [[17,1,5]] plain | valid | 0 | 0 | 1 | 3 paths (t = 2) | rejected |
+| Du24 [[19,1,5]] | valid | 0 | 0 | 1 | 0 | rejected |
+| LL25 [[17,1,5]] [1,1,1,1,1,...]^T | valid | 1 | 1 | 0 | 0 | rejected |
+| LL25 [[17,1,5]] [2,2,2,1,1]^T | valid | 1 | 1 | 0 | 0 | rejected |
+| LL25 [[19,1,5]] [1,1,1,...]^T | valid | 1 | 1 | 0 | 0 | rejected |
+| LL25 [[19,1,5]] [2,2,2,1,1,1]^T | valid | 1 | 1 | 0 | 0 | rejected |
+| CB18 [[45,1,5]] | | | | | | not rerun yet |
+| CB18 [[49,1,7]] | | | | | | out of memory (earlier run) |
 
-- Bha23 [[5,1,3]] and fig5: after a flag, the adaptive measurements leave
-  errors with different syndromes under one record (Condition 1), and a
-  decoding terminal cannot fall back on Condition 3. In [[5,1,3]], a false
-  alarm (`IIIII`) and the hook error `IIZXI` both read 0 on the circuits that
-  follow but differ on `IXZZX`.
-- Du24: after the trivial rounds, the flag circuit is not 2-flag: two faults
-  that raise no flag can leave `IIIIIIIXIIIIIIZXZ`, of weight 3.
-- LL25 distance 5: the protocol ends after one trivial round. An input error
-  of weight 1 and one fault can then leave a weight-2 error, which Condition 3
-  forbids (r + s ≤ t, weight ≤ s); in [[19,1,5]] [2,2,2,1,1,1]^T two faults
-  alone leave a weight-3 error.
+Compared with the paper's Table 1:
+
+- Bha23 [[7,1,3]] fig5 (Low-depth2) and Bha23 [[5,1,3]] (Low-depth): the
+  paper reports 6 and 4 control-flow bugs. Its experiments try only
+  Condition 1 at decoding terminals; with that restriction we find 6 and 8.
+  Def. 3.9 lets any terminating path use Condition 3, and on fig5 the six
+  paths do satisfy it: after `IIIXXXX` reads 1, the errors left (`X5` or `X7`
+  from one fault, say) have weight 1, so a decoder that applies no correction
+  meets weak FTEC there. In [[5,1,3]], four paths fail all three conditions:
+  after a flag, one fault can leave an error of weight 2 that the adaptive
+  measurements do not pin down.
+- LL25 distance 5: the paper reports a control-flow bug only for
+  [[19,1,5]] [2,2,2,1,1,1]^T. All four protocols end after one trivial round,
+  where an input error of weight 1 plus one fault can leave a weight-2 error;
+  Condition 3 includes input errors (r + s ≤ t, weight ≤ s), so this is a bug
+  by Def. 3.9. In [2,2,2,1,1,1]^T two faults alone suffice.
+- Du24 [[17,1,5]]: `Du24_[[17,1,5]]_plain` matches the paper's column (one
+  flag bug, three correctability paths). The parallel-flag variant has two
+  flag circuits, `F6X_f` and `F6Z_f`, each counted, and six paths.
+- CB18 [[45,1,5]] was not rerun with these checks; [[49,1,7]] ran out of
+  memory in an earlier run.
 
 The full table, with times and memory for all four methods, is on the
 website's results page.
