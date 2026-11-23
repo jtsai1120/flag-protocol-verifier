@@ -541,8 +541,8 @@
         `<p>This record reaches the terminal, but it satisfies none of the three conditions of Def. 3.9, so the protocol cannot know it has seen enough to stop here.</p>`,
         `<p class="record">Record: ${recordHtml(item.record)}</p>`,
         `<div class="cond"><h4>Condition 1 fails</h4><p>${subs(item.why1)}</p>`,
-        rounds ? `<p class="muted">Circuit faults this record proves: ${item.detected} (t = ${item.t}).</p><table class="rounds"><tr><th></th><th>outcomes</th><th></th><th>faults proved</th></tr>${rounds}</table>` : '',
-        (item.split || []).map((w, i) => provenanceHtml(`Error ${i + 1} of level (0, t)`, w, item.record, i ? 'w2' : 'w1')).join(''),
+        rounds ? `<p class="muted">Faults this record detects (input errors counted): ${item.detected} (t = ${item.t}).</p><table class="rounds"><tr><th></th><th>outcomes</th><th></th><th>faults proved</th></tr>${rounds}</table>` : '',
+        (item.split || []).map((w, i) => provenanceHtml(`Error ${i + 1} with r + s = t`, w, item.record, i ? 'w2' : 'w1')).join(''),
         `</div><div class="cond"><h4>Condition 2 fails</h4><p>${subs(item.why2)}</p></div>`,
         `<div class="cond"><h4>Condition 3 fails</h4><p>${subs(item.why3)}</p>`,
         item.heavy ? provenanceHtml('The error', item.heavy, item.record, 'w0') : '', `</div>`);
