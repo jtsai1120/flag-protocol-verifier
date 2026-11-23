@@ -8,6 +8,8 @@
   // (CB18 [[17,1,5]]: 121 s native, 310 s in WebAssembly).
   const WASM_SLOWDOWN = 2.6;
   const STORE_KEY = 'fpv-playground-v1';
+  // The largest decision tree the playground draws, in tree nodes.
+  const TREE_LIMIT = 1000;
 
   const $ = id => document.getElementById(id);
   const plist = $('plist'), tabs = $('tabs'), editor = $('editor'), entrySel = $('entry');
@@ -18,6 +20,10 @@
   let current = null;               // workspace name
   let currentFile = null;
   let worker = null, workerReady = false, running = false, timer = null;
+  const treeView = $('tree-view');
+  let treeRun = false, treeOut = [];
+  const outTabs = $('out-tabs'), cexView = $('cex-view'), cexSelect = $('cex-select');
+  let cex = null;                   // the last run's --json-out, with its list of counterexamples
 
   // --- persistence (best effort; the page works without it) --------------------
   function load() {
@@ -311,14 +317,30 @@
       if (statusEl.textContent.startsWith('Loading')) statusEl.textContent = 'Ready';
       updateRunButton();
     } else if (data.type === 'out') {
+      if (treeRun && !data.err) { treeOut.push(data.text); return; }
       let cls = data.err ? 'err' : '';
       if (/^\d+ unprotected path/.test(data.text) || /^(control-flow bugs|flag bugs\s*):\s*[1-9]/.test(data.text) || /^FTEC\s*: rejected/.test(data.text)) cls = 'bad';
       else if (/^no unprotected path found/.test(data.text) || /^(control-flow bugs|flag bugs\s*):\s*0 /.test(data.text) || /^FTEC\s*: accepted/.test(data.text)) cls = 'good';
       line(data.text, cls);
     } else if (data.type === 'done') {
+      if (!treeRun && data.result) loadCounterexamples(data.result);
+      if (treeRun && data.rc === 0 && showTree()) {
+        finishRun('Done');
+        return;
+      }
+      treeOut.forEach(t => line(t));
       line(`\n[exit ${data.rc}, ${(data.ms / 1000).toFixed(2)} s in the browser]`, 'sys');
       finishRun(data.rc === 0 ? 'Done' : 'Finished with errors');
     }
+  }
+
+  function showTree() {
+    let data;
+    try { data = JSON.parse(treeOut.join('\n')); } catch (_) { return false; }
+    out.hidden = true;
+    treeView.hidden = false;
+    window.DecisionTree.render(treeView, data);
+    return true;
   }
 
   function line(text, cls) {
@@ -339,13 +361,19 @@
     if (!ws || !ws.entry) return;
     const args = ['ftec-verify', '/w/' + ws.entry, '--fqcv=' + $('fqcv').value];
     if ($('first').checked) args.push('--first');
-    if ($('dag').checked) args.push('--dag');
+    treeRun = $('tree').checked;
+    treeOut = [];
+    if (treeRun) args.push('--tree=' + TREE_LIMIT);
+    else args.push('--json-out=/w/.result.json');
     if ($('skip-se').checked) args.push('--skip-circuit-check');
-    if ($('bound').value) args.push('--bound=' + parseInt($('bound').value, 10));
-    if ($('max-paths').value) args.push('--max-paths=' + parseInt($('max-paths').value, 10));
+    if ($('no-input').checked) args.push('--no-input-errors');
 
     out.textContent = '';
-    line('$ ' + args.map(a => /[\s\[\]^]/.test(a) ? `"${a}"` : a).join(' ').replace('/w/', ''), 'sys');
+    out.hidden = false;
+    treeView.hidden = true;
+    treeView.textContent = '';
+    clearCounterexamples();
+    line('$ ' + args.filter(a => !a.startsWith('--json-out')).map(a => /[\s\[\]^]/.test(a) ? `"${a}"` : a).join(' ').replace('/w/', ''), 'sys');
     running = true;
     updateRunButton();
     stopBtn.disabled = false;
@@ -373,6 +401,171 @@
     if (!running) return;
     line('\n[stopped]', 'sys');
     finishRun('Stopped');
+  }
+
+  // --- counterexamples ---------------------------------------------------------------
+  // After a run, every failure the verifier traced back (--json-out) can be
+  // picked from a list: its path is lit up in the decision tree, and the
+  // executions behind it are spelled out, with their faults drawn on the
+  // circuits. A flag bug shows its circuit instead.
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const subs = t => esc(t).replace(/\b([mf])(\d+)\b/g, '$1<sub>$2</sub>');
+  const code = t => `<code>${esc(t)}</code>`;
+
+  function clearCounterexamples() {
+    cex = null;
+    outTabs.hidden = true;
+    cexView.hidden = true;
+    $('cex-visual').textContent = '';
+    $('cex-detail').textContent = '';
+    cexSelect.textContent = '';
+    setOutView('console');
+  }
+
+  function setOutView(view) {
+    for (const b of outTabs.querySelectorAll('button')) b.setAttribute('aria-selected', String(b.dataset.view === view));
+    out.hidden = view !== 'console';
+    cexView.hidden = view !== 'cex';
+    if (view === 'cex' && cex && !$('cex-visual').firstChild) showCounterexample(cexSelect.value);
+  }
+  outTabs.addEventListener('click', e => { const b = e.target.closest('button'); if (b) setOutView(b.dataset.view); });
+  cexSelect.addEventListener('change', () => showCounterexample(cexSelect.value));
+
+  function loadCounterexamples(text) {
+    let data;
+    try { data = JSON.parse(text); } catch (_) { return; }
+    const items = [];
+    (data.correctability || []).forEach((c, i) => items.push([`c${i}`, `Correctability · path ${c.path} · t = ${c.t}`]));
+    (data.validity || []).forEach((v, i) => items.push([`v${i}`, `Control-flow bug · path ${v.path} (${v.action})`]));
+    (data.flags || []).forEach((f, i) => items.push([`f${i}`, `Flag bug · ${f.se} is not ${f.k}-flag`]));
+    if (!items.length) return;
+    cex = data;
+    for (const [value, label] of items) cexSelect.append(el('option', { value, textContent: label }));
+    $('cex-count').textContent = `(${items.length})`;
+    outTabs.hidden = false;
+  }
+
+  function highlightOf(item, witnesses) {
+    const nodes = new Set(item.chain);
+    const values = new Map(), marks = new Map();
+    for (const e of item.record) values.set(e.node, `m${e.step}=${e.s}` + (e.f ? ` f${e.step}=${e.f}` : ''));
+    for (const [w, label, cls] of witnesses) {
+      for (const f of (w && w.faults) || []) {
+        const e = item.record[f.step - 1];
+        if (!e) continue;
+        const list = marks.get(e.node) || [];
+        if (!list.some(m => m.label === label)) list.push({ label, cls });
+        marks.set(e.node, list);
+      }
+    }
+    return { nodes, values, marks };
+  }
+
+  function showTreeFor(item, title, witnesses) {
+    const box = el('div', { className: 'tree-view inner' });
+    $('cex-visual').append(box);
+    const tree = cex.tree && !cex.tree.too_large ? cex.tree : item.chain_tree;
+    if (!tree) { box.textContent = 'No decision tree to show.'; return; }
+    window.DecisionTree.render(box, tree, {
+      title: title + (tree.chain ? ' · the whole tree is too large to draw, so only this path is shown' : ''),
+      highlight: highlightOf(item, witnesses),
+    });
+  }
+
+  function provenanceHtml(label, w, record, cls, single) {
+    if (!w || !w.found) return `<div class="prov ${cls}"><h4>${esc(label)}</h4><p>Could not trace this error back.</p></div>`;
+    const hasInput = /[XYZ]/.test(w.input_error);
+    const items = [];
+    items.push(hasInput ? `input error ${code(w.input_error)} (weight ${[...w.input_error].filter(c => c !== 'I').length})` : 'no input error');
+    w.faults.forEach((f, i) => {
+      const se = single || (record[f.step - 1] || {}).se || '?';
+      const where = single ? '' : ` (circuit ${f.step}, outcomes m<sub>${f.step}</sub>)`;
+      items.push(`fault ${i + 1}: ${code(f.pauli)} on ${esc(f.qubits.join(', '))} right after ${esc(f.gate)} #${f.instruction + 1} of ${esc(se)}${where}`);
+    });
+    if (!w.faults.length) items.push('no circuit fault');
+    const stab = w.up_to_stabilizer ? ' (the error reported above times a stabilizer, which is the same error to the code)' : '';
+    return `<div class="prov ${cls}"><h4>${esc(label)} = ${code(w.residual)} <span class="muted">on the data at the end${stab}</span></h4><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
+  }
+
+  // One drawing per circuit run that holds a fault of any of the witnesses.
+  function faultCircuits(detail, record, witnesses) {
+    const bySteps = new Map();
+    for (const [w, label, cls] of witnesses) {
+      for (const f of (w && w.found && w.faults) || []) {
+        const list = bySteps.get(f.step) || [];
+        list.push({ instruction: f.instruction, pauli: f.pauli, qubits: f.qubits, cls, label, title: `${label}: ${f.pauli} on ${f.qubits.join(', ')}` });
+        bySteps.set(f.step, list);
+      }
+    }
+    for (const step of [...bySteps.keys()].sort((a, b) => a - b)) {
+      const e = record[step - 1];
+      const circuit = e && cex.circuits[e.se];
+      if (!circuit) continue;
+      const card = el('div', { className: 'tree-view circuit-card' });
+      detail.append(card);
+      window.CircuitView.render(card, circuit, { title: `Circuit ${step}: ${e.se} (${circuit.file}), m${step} = ${e.s}` + (e.f ? `, f${step} = ${e.f}` : ''), faults: bySteps.get(step) });
+    }
+  }
+
+  function recordHtml(record) {
+    return record.map(e => `m<sub>${e.step}</sub>=${esc(e.s)}` + (e.f ? ` f<sub>${e.step}</sub>=${esc(e.f)}` : '')).join(' · ');
+  }
+
+  function showCounterexample(value) {
+    const visual = $('cex-visual'), detail = $('cex-detail');
+    visual.textContent = '';
+    detail.textContent = '';
+    if (!cex || !value) return;
+    const kind = value[0], item = { c: cex.correctability, v: cex.validity, f: cex.flags }[kind][+value.slice(1)];
+    const html = [];
+
+    if (kind === 'c') {
+      const ws = [[item.witnesses[0], 'E1', 'w1'], [item.witnesses[1], 'E2', 'w2']];
+      showTreeFor(item, `Path ${item.path}: the record below, outcome by outcome`, ws);
+      html.push(`<h3>Correctability fails on path ${item.path} at t = ${item.t}</h3>`,
+        `<p>Two executions with at most ${item.t} fault${item.t === 1 ? '' : 's'} (input error included) produce exactly this record, so the decoder sees the same thing, but the errors they leave differ by a logical operator: no correction fixes both. ${item.records > 1 ? `(${item.records} records of this path fail; this is the first.)` : ''}</p>`,
+        `<p class="record">Record: ${recordHtml(item.record)}</p>`,
+        `<p class="muted">${esc(item.detail)}</p>`,
+        provenanceHtml('E1', item.witnesses[0], item.record, 'w1'),
+        provenanceHtml('E2', item.witnesses[1], item.record, 'w2'));
+      detail.innerHTML = html.join('');
+      faultCircuits(detail, item.record, ws);
+    } else if (kind === 'v') {
+      const ws = [];
+      (item.split || []).forEach((w, i) => ws.push([w, `C1-${i + 1}`, i ? 'w2' : 'w1']));
+      if (item.heavy) ws.push([item.heavy, 'C3', 'w0']);
+      showTreeFor(item, `Path ${item.path}: a record no condition settles`, ws);
+      const rounds = (item.rounds || []).map((r, i) =>
+        `<tr><td>round ${i + 1}</td><td>${r.steps.map(s => `m<sub>${s}</sub>`).join(' ')}</td><td>${r.flagged ? 'flag raised' : ''}</td><td>${r.counted ? `+${r.counted}` : '0'}</td></tr>`).join('');
+      html.push(`<h3>Control-flow bug on path ${item.path} (${esc(item.action)})</h3>`,
+        `<p>This record reaches the terminal, but it satisfies none of the three conditions of Def. 3.9, so the protocol cannot know it has seen enough to stop here.</p>`,
+        `<p class="record">Record: ${recordHtml(item.record)}</p>`,
+        `<div class="cond"><h4>Condition 1 fails</h4><p>${subs(item.why1)}</p>`,
+        rounds ? `<p class="muted">Circuit faults this record proves: ${item.detected} (t = ${item.t}).</p><table class="rounds"><tr><th></th><th>outcomes</th><th></th><th>faults proved</th></tr>${rounds}</table>` : '',
+        (item.split || []).map((w, i) => provenanceHtml(`Error ${i + 1} of level (0, t)`, w, item.record, i ? 'w2' : 'w1')).join(''),
+        `</div><div class="cond"><h4>Condition 2 fails</h4><p>${subs(item.why2)}</p></div>`,
+        `<div class="cond"><h4>Condition 3 fails</h4><p>${subs(item.why3)}</p>`,
+        item.heavy ? provenanceHtml('The error', item.heavy, item.record, 'w0') : '', `</div>`);
+      detail.innerHTML = html.join('');
+      faultCircuits(detail, item.record, ws);
+    } else {
+      const circuit = cex.circuits[item.se];
+      const w = item.witness;
+      const box = el('div', { className: 'tree-view inner' });
+      visual.append(box);
+      if (circuit) {
+        window.CircuitView.render(box, circuit, {
+          title: `${item.se} (${circuit.file}) with the faults below`,
+          faults: ((w && w.faults) || []).map((f, i) => ({ instruction: f.instruction, pauli: f.pauli, qubits: f.qubits, cls: 'w0', label: `fault ${i + 1}`, title: `${f.pauli} on ${f.qubits.join(', ')}` })),
+        });
+      }
+      html.push(`<h3>Flag bug: ${esc(item.se)} is not ${item.k}-flag</h3>`,
+        `<p>A record of path ${item.path} ends in repeated rounds (Condition 2), so the circuits of those rounds must satisfy the ${item.k}-flag condition (Def. 3.7): with no input error, any ${item.k} or fewer faults that raise no flag must leave an error of weight at most the number of faults, up to stabilizers. ${esc(item.se)} does not.</p>`,
+        w && w.found ? `<p>The ${w.faults.length} fault${w.faults.length === 1 ? '' : 's'} drawn above raise no flag (every flag outcome reads 0), yet leave ${code(w.residual)} on the data, of minimum weight above ${w.s}.</p>` : `<p class="muted">${esc(item.problem)}</p>`,
+        w && w.found ? provenanceHtml('The error', w, [], 'w0', item.se) : '',
+        `<p class="muted">Needed by ${item.records} record${item.records === 1 ? '' : 's'} on ${item.paths} path${item.paths === 1 ? '' : 's'}, e.g. path ${item.path}: ${recordHtml(item.record)}</p>`);
+      detail.innerHTML = html.join('');
+    }
   }
 
   // --- templates -------------------------------------------------------------------

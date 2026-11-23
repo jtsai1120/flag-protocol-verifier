@@ -89,7 +89,7 @@
       get: r => r.invalid_paths === undefined ? null : r.invalid_paths,
       show: r => r.invalid_paths === undefined ? null : r.invalid_paths === 0 ? ['0', 'v-good']
         : [`${r.invalid_paths} path${r.invalid_paths > 1 ? 's' : ''} (${count(r.invalid)} record${r.invalid > 1 ? 's' : ''})`, 'v-bad'],
-      def: 'Paths with a measurement record that satisfies none of Conditions 1–3 of Def. 3.9 (each record is a path of the finest decision tree; Condition 2 must be forced by the guards). A decoding record may use any condition; an ending one applies no correction, so it needs Condition 3. The count in brackets is the records that fail.' },
+      def: 'Paths with a measurement record that satisfies none of Conditions 1–3 of Def. 3.9, as written: Condition 1 needs the record to prove t circuit faults; Condition 2 must be forced by the guards. A decoding record may use any condition; an ending one applies no correction, so it needs Condition 3. The count in brackets is the records that fail.' },
     { group: 'Verdict', key: 'cf_bugs_strict', label: 'Control-flow bugs (no Cond 3 at decode)', kind: 'verdict', validity: true,
       get: r => r.invalid_paths_strict === undefined ? null : r.invalid_paths_strict,
       show: r => r.invalid_paths_strict === undefined ? null : r.invalid_paths_strict === 0 ? ['0', 'v-good']

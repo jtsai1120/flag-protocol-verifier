@@ -44,16 +44,15 @@
     <textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="File contents"></textarea>
     <div class="controls">
       <label>Entry <select id="entry" aria-label="Protocol file to verify"></select></label>
-      <label>E1E2 method
+      <label title="How the last step of the correctability check (two errors with the same syndrome whose product is a logical operator) is answered">Correctability method
         <select id="fqcv">
           <option>image</option><option>table</option><option>square</option><option>bruteforce</option>
         </select>
       </label>
       <label><input type="checkbox" id="first"> Stop at first failure</label>
-      <label><input type="checkbox" id="dag"> Structure only</label>
+      <label title="Draw the decision tree of the protocol instead of verifying it"><input type="checkbox" id="tree"> Show decision tree only</label>
       <label title="Verify the circuits as written, even if they are not valid"><input type="checkbox" id="skip-se"> Skip the circuit check</label>
-      <label>Bound <input type="number" id="bound" min="1" placeholder="auto"></label>
-      <label>Max paths <input type="number" id="max-paths" min="1" value="5000"></label>
+      <label title="Start every run from an error-free input (r = 0)"><input type="checkbox" id="no-input"> No input errors</label>
     </div>
     <p class="notice" id="estimate"></p>
   </section>
@@ -64,10 +63,22 @@
       <button class="stop" id="stop" type="button" disabled>Stop</button>
       <span class="status" id="status" role="status">Loading the verifier…</span>
     </div>
+    <div class="out-tabs" id="out-tabs" role="tablist" hidden>
+      <button type="button" role="tab" data-view="console" aria-selected="true">Console</button>
+      <button type="button" role="tab" data-view="cex" aria-selected="false">Counterexamples <span id="cex-count"></span></button>
+    </div>
     <pre class="console" id="console" aria-live="polite"></pre>
+    <div class="tree-view" id="tree-view" hidden></div>
+    <div class="cex-view" id="cex-view" hidden>
+      <div class="cex-bar"><label>Counterexample <select id="cex-select"></select></label></div>
+      <div class="cex-visual" id="cex-visual"></div>
+      <div class="cex-detail" id="cex-detail"></div>
+    </div>
   </section>
 </main>
 
+<script src="tree.js"></script>
+<script src="circuit.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

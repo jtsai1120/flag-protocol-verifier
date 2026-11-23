@@ -30,6 +30,8 @@ onmessage = async event => {
   try { M.FS.mkdir('/w'); } catch (_) { /* exists */ }
   for (const [name, text] of Object.entries(files)) M.FS.writeFile('/w/' + name, text);
 
+  const RESULT = '/w/.result.json';
+  try { M.FS.unlink(RESULT); } catch (_) { /* none */ }
   const started = performance.now();
   let rc;
   try {
@@ -44,5 +46,7 @@ onmessage = async event => {
     });
     rc = -1;
   }
-  post('done', { rc, ms: performance.now() - started });
+  let result = null;
+  try { result = M.FS.readFile(RESULT, { encoding: 'utf8' }); } catch (_) { /* not written */ }
+  post('done', { rc, ms: performance.now() - started, result });
 };
