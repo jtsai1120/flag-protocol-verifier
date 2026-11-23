@@ -72,6 +72,8 @@ void usage(const char* argv0) {
         << "  --no-input-errors\n"
         << "                   start every run from an error-free input (r = 0)\n"
         << "  --no-validity    skip the protocol validity check (Def. 3.9)\n"
+        << "  --by-path        list, for every path, how many of its records satisfy\n"
+        << "                   Conditions 1, 2 and 3 (Def. 3.9)\n"
         << "  --decode-needs-cond12\n"
         << "                   do not let Condition 3 settle a decode() terminal (as the\n"
         << "                   paper's experiments do); by default Def. 3.9 lets any\n"
@@ -150,6 +152,7 @@ int main(int argc, char** argv) {
     std::size_t                max_paths = 5000;
     bool                       dag_only  = false;
     bool                       skip_circuit_check = false;
+    bool                       by_path = false;
     ftec::VerifyOptions        options;
 
     for (int i = 1; i < argc; ++i) {
@@ -173,6 +176,8 @@ int main(int argc, char** argv) {
             spbdd_options.input_errors = false;
         } else if (arg == "--no-validity") {
             options.check_validity = false;
+        } else if (arg == "--by-path") {
+            by_path = true;
         } else if (arg == "--decode-needs-cond12") {
             options.decode_may_use_cond3 = false;
         } else if (arg == "--dag") {
@@ -305,6 +310,15 @@ int main(int argc, char** argv) {
                     std::cout << "  path " << v.path_id << "  " << v.terminal_action
                               << "  record=" << v.record_string() << "\n        " << v.reason
                               << "\n";
+                }
+            }
+            if (by_path) {
+                std::cout << "by path (records satisfying each condition; a record may satisfy several):\n";
+                for (const auto& p : result.by_path) {
+                    ftec::PathFailure f{p.path_id, p.terminal_action, p.example, {}};
+                    std::cout << "  path " << p.path_id << "  " << p.terminal_action << "  records " << p.records
+                              << "  Cond1 " << p.cond1 << "  Cond2 " << p.cond2 << "  Cond3 " << p.cond3
+                              << "  none " << p.failing << "  e.g. " << f.record_string() << "\n";
                 }
             }
             std::cout << "control-flow bugs if decode() may not use Cond 3: "

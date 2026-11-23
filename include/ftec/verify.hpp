@@ -54,6 +54,15 @@ struct ValidityFailure {
     [[nodiscard]] std::string record_string() const;
 };
 
+// How the records of one path fare: how many satisfy each condition (a
+// record may satisfy several) and how many satisfy none.
+struct PathValidity {
+    std::size_t              path_id = 0;
+    std::string              terminal_action;
+    std::size_t              records = 0, cond1 = 0, cond2 = 0, cond3 = 0, failing = 0;
+    std::vector<RecordEntry> example;
+};
+
 // A circuit used in the repeated suffix of a path that satisfies Condition 2
 // but does not satisfy the (t - m)-flag condition (Def. 3.9 (2), Def. 3.7):
 // part (1), or a flag raised without any fault (part (2)). One entry per
@@ -117,6 +126,7 @@ struct VerifyResult {
     std::vector<ValidityFailure> validity_failures;   // one per invalid path
     std::size_t                  invalid_records = 0; // all records behind them
     std::size_t                  invalid_paths_strict = 0;   // if Cond 3 may not settle decode()
+    std::vector<PathValidity>    by_path;
     std::vector<FlagFailure>     flag_failures;
 
     [[nodiscard]] bool clean() const { return failures.empty(); }

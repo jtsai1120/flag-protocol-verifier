@@ -535,6 +535,7 @@ private:
     // A path is a control-flow bug when one of its records satisfies none.
     struct ClassState {
         bool                     form = true;
+        std::size_t              records = 0;
         std::size_t              needing = 0;   // records only Cond 2 could settle
         std::size_t              needing_strict = 0;   // the same, if Cond 3 may not settle decode()
         std::optional<ValidityFailure> example;
@@ -543,6 +544,8 @@ private:
     };
     struct PathState {
         bool                     decode = true;
+        std::size_t              records = 0, c1 = 0, c3 = 0;
+        std::vector<RecordEntry> first;
         std::size_t              failing = 0;   // records nothing settles (end paths)
         std::optional<ValidityFailure> example;
         std::map<int, ClassState> classes;      // c = min(w, t)
@@ -556,9 +559,12 @@ private:
         const int t = dag_.code.fault_budget();
         PathState& path = paths_[terminal.path_id];
         path.decode = terminal.terminal_action != "end";
+        if (path.records++ == 0) path.first = record;
 
         const bool c1 = ex.w >= t && facts.same_syndrome;
         const bool c3 = facts.weight_bounded;
+        if (c1) ++path.c1;
+        if (c3) ++path.c3;
         if (!path.decode) {
             if (c3) { ++result_.by_condition[2]; return; }
             if (!path.example) {
@@ -574,6 +580,7 @@ private:
         const std::size_t need = static_cast<std::size_t>(t - m + 1);
         const std::size_t have = repeated_suffix(ex);
         ClassState& cls = path.classes[c];
+        ++cls.records;
         if (cls.form && (t < 1 || !ex.readable || have < need)) {
             cls.form = false;
             cls.flags.clear();
@@ -616,6 +623,9 @@ private:
         for (auto& [path_id, path] : paths_) {
             std::optional<ValidityFailure> example = path.example;
             std::size_t failing = path.failing;
+            PathValidity pv{path_id, path.decode ? "decode" : "end", path.records, path.c1, 0, path.c3, 0, {}};
+            pv.example = path.first;
+            for (auto& [c, cls] : path.classes) if (path.decode && cls.form) pv.cond2 += cls.records;
             bool strict_bug = path.failing > 0;
             for (auto& [c, cls] : path.classes) {
                 if (!cls.form && cls.needing_strict) strict_bug = true;
@@ -646,6 +656,8 @@ private:
                 }
             }
             if (strict_bug) ++result_.invalid_paths_strict;
+            pv.failing = failing;
+            result_.by_path.push_back(std::move(pv));
             if (example) {
                 result_.validity_failures.push_back(*example);
                 extra_invalid_records_ += failing - 1;
