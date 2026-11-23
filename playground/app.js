@@ -609,13 +609,12 @@
         `<div class="cond" id="cond-3"><h4>Condition 3 fails</h4><p>${subs(item.why3)}</p>`,
         item.heavy ? provenanceHtml('The error', item.heavy, item.record, 'w0') : '', `</div>`);
       detail.innerHTML = html.join('');
-      // One figure per condition.
+      // A figure for Condition 1 and one for Condition 3 (Condition 2 is about
+      // the record's shape, which the rounds table and the tree already show).
       const split = (item.split || []).map((w, i) => [w, `error ${i + 1}`, i ? 'w2' : 'w1']);
       recordFigure($('cond-1'), item.record, split.length
         ? 'Condition 1: two executions behind this record whose errors a generator tells apart'
         : `Condition 1: the record, circuit by circuit, with what each measured (${item.detected} fault${item.detected === 1 ? '' : 's'} detected, t = ${item.t})`, split);
-      const lastRounds = (item.rounds || []).slice(-(item.t + 1)).flatMap(r => r.steps);
-      recordFigure($('cond-2'), item.record, 'Condition 2: the last rounds before the terminal, with what they measured', [], lastRounds.length ? lastRounds : null);
       if (item.heavy) recordFigure($('cond-3'), item.record, 'Condition 3: an execution behind this record that leaves too heavy an error', [[item.heavy, 'C3', 'w0']]);
     } else {
       const circuit = cex.circuits[item.se];
@@ -636,6 +635,71 @@
       detail.innerHTML = html.join('');
     }
   }
+
+  // --- resizable splits ---------------------------------------------------------------
+  // The border between the files and the output, and the one between a
+  // counterexample's drawing and its explanation, can be dragged (or moved with
+  // the arrow keys); a double click puts them back. Sizes are remembered.
+  const SPLIT_KEY = 'fpv-playground-splits';
+  const splits = (() => { try { return JSON.parse(localStorage.getItem(SPLIT_KEY) || '{}'); } catch (_) { return {}; } })();
+  const saveSplits = () => { try { localStorage.setItem(SPLIT_KEY, JSON.stringify(splits)); } catch (_) { /* blocked */ } };
+
+  function draggable(handle, onMove, onReset, onKey) {
+    handle.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      handle.setPointerCapture(e.pointerId);
+      handle.classList.add('active');
+      document.body.classList.add('resizing');
+      const move = ev => onMove(ev.clientX, ev.clientY);
+      const up = () => {
+        handle.releasePointerCapture(e.pointerId);
+        handle.classList.remove('active');
+        document.body.classList.remove('resizing');
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        handle.removeEventListener('pointercancel', up);
+        saveSplits();
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+      handle.addEventListener('pointercancel', up);
+    });
+    handle.addEventListener('dblclick', () => { onReset(); saveSplits(); });
+    handle.addEventListener('keydown', e => {
+      const step = e.shiftKey ? 60 : 20;
+      const d = { ArrowLeft: -step, ArrowUp: -step, ArrowRight: step, ArrowDown: step }[e.key];
+      if (d === undefined) return;
+      e.preventDefault();
+      onKey(d);
+      saveSplits();
+    });
+  }
+
+  const main = $('main'), visual = $('cex-visual');
+  function setOutWidth(px) {
+    if (px == null) { main.style.removeProperty('--out-width'); delete splits.out; return; }
+    const r = main.getBoundingClientRect();
+    const w = Math.max(280, Math.min(px, r.width - 17 * 16 - 300));
+    main.style.setProperty('--out-width', w + 'px');
+    splits.out = w;
+  }
+  function setVisualHeight(px) {
+    if (px == null) { visual.style.flex = ''; delete splits.visual; return; }
+    const h = Math.max(120, Math.min(px, cexView.getBoundingClientRect().height - 160));
+    visual.style.flex = `0 0 ${h}px`;
+    splits.visual = h;
+  }
+  draggable($('col-resizer'),
+    x => setOutWidth(main.getBoundingClientRect().right - x),
+    () => setOutWidth(null),
+    d => setOutWidth($('col-resizer').parentElement.getBoundingClientRect().width - d));
+  draggable($('row-resizer'),
+    (x, y) => setVisualHeight(y - visual.getBoundingClientRect().top),
+    () => setVisualHeight(null),
+    d => setVisualHeight(visual.getBoundingClientRect().height + d));
+  if (splits.out) setOutWidth(splits.out);
+  if (splits.visual) visual.style.flex = `0 0 ${splits.visual}px`;
 
   // --- templates -------------------------------------------------------------------
   // A new protocol starts as one unflagged round of the [[5,1,3]] code, which

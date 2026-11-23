@@ -547,6 +547,19 @@ window.DecisionTree = (() => {
       apply();
     }, { passive: false });
     root.addEventListener('dblclick', fit);
+    // Fit again when the drawing's box changes size (a dragged border).
+    if (window.ResizeObserver) {
+      let last = null, queued = false;
+      new ResizeObserver(([entry]) => {
+        const { width, height } = entry.contentRect;
+        if (!width || !height || (last && last.width === width && last.height === height)) return;
+        const first = !last;
+        last = { width, height };
+        if (first || queued) return;
+        queued = true;
+        requestAnimationFrame(() => { queued = false; fit(); });
+      }).observe(root);
+    }
     return fit;
   }
 
