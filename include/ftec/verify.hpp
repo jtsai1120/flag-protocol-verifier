@@ -86,6 +86,10 @@ struct VerifyOptions {
     //   (2) every path satisfying Cond 2 has its repeated suffix satisfy the
     //     (t - m)-flag condition, whichever condition settles the path.
     bool check_validity = true;
+    // Def. 3.9 lets a decode() terminal be settled by Cond 3 too (the decoder
+    // Thm. 3.10 builds then applies no correction). The paper's experiments
+    // only try Cond 1 there; false reproduces that.
+    bool decode_may_use_cond3 = true;
 };
 
 struct VerifyResult {
@@ -112,6 +116,7 @@ struct VerifyResult {
     std::size_t                  by_condition[3]  = {0, 0, 0};
     std::vector<ValidityFailure> validity_failures;   // one per invalid path
     std::size_t                  invalid_records = 0; // all records behind them
+    std::size_t                  invalid_paths_strict = 0;   // if Cond 3 may not settle decode()
     std::vector<FlagFailure>     flag_failures;
 
     [[nodiscard]] bool clean() const { return failures.empty(); }

@@ -84,6 +84,7 @@ field("validity_rss_growth_bytes", rf"^validity rss\s*:\s*max growth in one call
 field("invalid", r"^control-flow bugs: \d+ path\(s\)(?:, (\d+) terminal record)?",
       lambda m: int(m.group(1) or 0))
 field("invalid_paths", r"^control-flow bugs: (\d+) path\(s\)", lambda m: int(m.group(1)))
+field("invalid_paths_strict", r"^control-flow bugs if decode\(\) may not use Cond 3: (\d+) path", lambda m: int(m.group(1)))
 field("flag_bugs", r"^flag bugs\s*:\s*(\d+) circuit", lambda m: int(m.group(1)))
 field("diagnostics_s", rf"^diagnostics\s*:\s*{NUM} s", lambda m: float(m.group(1)))
 field("diagram_live", r"^diagram\s*:\s*(\d+) live", lambda m: int(m.group(1)))

@@ -72,6 +72,10 @@ void usage(const char* argv0) {
         << "  --no-input-errors\n"
         << "                   start every run from an error-free input (r = 0)\n"
         << "  --no-validity    skip the protocol validity check (Def. 3.9)\n"
+        << "  --decode-needs-cond12\n"
+        << "                   do not let Condition 3 settle a decode() terminal (as the\n"
+        << "                   paper's experiments do); by default Def. 3.9 lets any\n"
+        << "                   terminating path use any condition\n"
         << "  --skip-circuit-check\n"
         << "                   verify the circuits as written even if they are not\n"
         << "                   valid (correct and deterministic)\n";
@@ -169,6 +173,8 @@ int main(int argc, char** argv) {
             spbdd_options.input_errors = false;
         } else if (arg == "--no-validity") {
             options.check_validity = false;
+        } else if (arg == "--decode-needs-cond12") {
+            options.decode_may_use_cond3 = false;
         } else if (arg == "--dag") {
             dag_only = true;
         } else if (arg.rfind("--", 0) == 0) {
@@ -284,7 +290,7 @@ int main(int argc, char** argv) {
 
         if (result.validity_checked) {
             std::cout << "\nprotocol validity\n"
-                      << "terminal paths  : Cond 1 " << result.by_condition[0] << ", Cond 2 "
+                      << "terminal records: Cond 1 " << result.by_condition[0] << ", Cond 2 "
                       << result.by_condition[1] << ", Cond 3 " << result.by_condition[2] << "\n";
             if (result.control_flow_valid()) {
                 std::cout << "control-flow bugs: 0 path(s)\n";
@@ -301,6 +307,8 @@ int main(int argc, char** argv) {
                               << "\n";
                 }
             }
+            std::cout << "control-flow bugs if decode() may not use Cond 3: "
+                      << result.invalid_paths_strict << " path(s)\n";
             if (result.flags_valid()) {
                 std::cout << "flag bugs       : 0 circuit(s)\n";
             } else {

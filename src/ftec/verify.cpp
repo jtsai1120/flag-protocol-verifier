@@ -374,22 +374,19 @@ private:
 
     // ---- protocol validity (Def. 3.9) ---------------------------------------
     //
-    // Def. 3.9 is a property of terminating paths. Every record that reaches a
-    // terminal is checked against the three conditions; a path satisfies a
-    // condition when every record on it does, and the path is valid when one
-    // condition holds for the whole path:
+    // Every record that reaches a terminal must satisfy one of:
     //   Cond 1  the record shows t detected faults, and all residual errors of
     //           the record have one ideal syndrome (phi_CF1 of Eq. 14 is unsat);
-    //   Cond 2  m < t detected faults, then t - m + 1 consecutive identical,
-    //           unflagged full rounds (structural, no faults searched);
+    //   Cond 2  at least m < t detected faults, then t - m + 1 consecutive
+    //           identical, unflagged full rounds (structural, no faults searched);
     //   Cond 3  every residual error from input weight r and s faults,
     //           r + s <= t, has minimum weight <= s.
     // A decode() terminal may use any of them (Thm. 3.10 builds the decoder;
     // under Cond 3 it applies no correction). An end() terminal applies no
     // correction by construction, so only Cond 3 can justify it (Sec. 4.1.3).
-    // Part (2) of Def. 3.9: every path satisfying Cond 2 needs the
-    // (t - m)-flag condition on its repeated suffix, whichever condition
-    // settles the path.
+    // Part (2): wherever the path's guards force the form of Cond 2, the
+    // repeated suffix must satisfy the (t - m)-flag condition, whichever
+    // condition settles the records.
 
     // Faults the record exposes (detected-fault lower bound, after CB18
     // Secs. 2.2 and 3.1). The measurements are grouped into rounds (a round
@@ -518,21 +515,32 @@ private:
         return n;
     }
 
-    // Per terminating path. A path satisfies a condition when every record
-    // on it does. The detected-fault lower bound m of a path is the least w
-    // over its records (what its guards guarantee to have been exposed).
+    // Def. 3.9 speaks of the paths of a decision tree that branches on the
+    // outcomes, and of conditions those paths' guards guarantee. An FPDL path
+    // can merge executions that such a tree keeps apart -- a guard on a
+    // counter, say, takes records with different numbers of detected faults
+    // down one path -- so:
+    //   * Cond 1 and Cond 3 are checked record by record (Eq. 14 and the
+    //     Cond 3 query quantify over the executions of one record anyway);
+    //   * Cond 2 is a property of the path, for each number of detected
+    //     faults c = min(w, t) its records show: it holds for class c when
+    //     EVERY record of the path in that class ends in t - m + 1 identical,
+    //     unflagged full rounds, m = min(c, t - 1) ("at least m < t"). A
+    //     record that merely happens to repeat does not count.
+    // A path is a control-flow bug when one of its records satisfies none.
+    struct ClassState {
+        bool                     form = true;
+        std::size_t              needing = 0;   // records only Cond 2 could settle
+        std::size_t              needing_strict = 0;   // the same, if Cond 3 may not settle decode()
+        std::optional<ValidityFailure> example;
+        std::map<std::string, std::pair<const CircuitRef*, std::size_t>> flags;
+        std::vector<RecordEntry> flags_example;
+    };
     struct PathState {
         bool                     decode = true;
-        std::size_t              records = 0;
-        bool                     all_same = true;   // Cond 1: one ideal syndrome per record
-        bool                     all3 = true;       // Cond 3
-        int                      min_w = 1 << 20;
-        std::size_t              min_suffix = static_cast<std::size_t>(-1);
-        bool                     readable = true;
-        std::string              why_syndrome, why3;
-        std::vector<RecordEntry> ex_syndrome, ex_min_w, ex_min_suffix, ex3;
-        // need (number of repeated rounds) -> circuit -> (circuit, records)
-        std::map<std::size_t, std::map<std::string, std::pair<const CircuitRef*, std::size_t>>> suffix;
+        std::size_t              failing = 0;   // records nothing settles (end paths)
+        std::optional<ValidityFailure> example;
+        std::map<int, ClassState> classes;      // c = min(w, t)
     };
     std::map<std::size_t, PathState> paths_;
 
@@ -540,92 +548,102 @@ private:
                         const std::vector<RecordEntry>& record) {
         const auto facts = backend_.terminal_facts(state);
         const Exposure ex = exposure(record);
-        const std::size_t t = static_cast<std::size_t>(dag_.code.fault_budget());
+        const int t = dag_.code.fault_budget();
         PathState& path = paths_[terminal.path_id];
         path.decode = terminal.terminal_action != "end";
-        ++path.records;
 
-        if (!facts.same_syndrome && path.all_same) {
-            path.all_same = false;
-            path.why_syndrome = facts.syndrome_detail;
-            path.ex_syndrome = record;
+        const bool c1 = ex.w >= t && facts.same_syndrome;
+        const bool c3 = facts.weight_bounded;
+        if (!path.decode) {
+            if (c3) { ++result_.by_condition[2]; return; }
+            if (!path.example) {
+                path.example = ValidityFailure{terminal.path_id, terminal.terminal_action, record,
+                    "ends without decoding, so only Cond 3 applies, but " + facts.weight_detail};
+            }
+            ++path.failing;
+            return;
         }
-        if (!facts.weight_bounded && path.all3) {
-            path.all3 = false;
-            path.why3 = facts.weight_detail;
-            path.ex3 = record;
+
+        const int c = std::min(ex.w, t);
+        const int m = std::min(c, t - 1);
+        const std::size_t need = static_cast<std::size_t>(t - m + 1);
+        const std::size_t have = repeated_suffix(ex);
+        ClassState& cls = path.classes[c];
+        if (cls.form && (t < 1 || !ex.readable || have < need)) {
+            cls.form = false;
+            cls.flags.clear();
         }
-        if (ex.w < path.min_w) { path.min_w = ex.w; path.ex_min_w = record; }
-        if (!ex.readable) path.readable = false;
-        const std::size_t n = repeated_suffix(ex);
-        if (n < path.min_suffix) { path.min_suffix = n; path.ex_min_suffix = record; }
-        // The circuits of the last `need` rounds, for every need this record allows.
-        for (std::size_t need = 1; need <= std::min(n, t + 1); ++need) {
-            auto& slot_map = path.suffix[need];
+        if (cls.form) {
+            if (cls.flags_example.empty()) cls.flags_example = record;
             for (std::size_t r = ex.rounds.size() - need; r < ex.rounds.size(); ++r) {
                 for (const std::size_t e : ex.rounds[r].entries) {
                     const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
-                    auto& slot = slot_map[circuit.qasm.string() + "\n" + circuit.se_name];
+                    auto& slot = cls.flags[circuit.qasm.string() + "\n" + circuit.se_name];
                     slot.first = &circuit;
                     ++slot.second;
                 }
             }
         }
+        if (c1) { ++result_.by_condition[0]; return; }
+        ++cls.needing_strict;
+        if (c3 && options_.decode_may_use_cond3) { ++result_.by_condition[2]; return; }
+        ++cls.needing;
+        if (!cls.example) {
+            const std::string why1 = !facts.same_syndrome ? facts.syndrome_detail
+                : "the record exposes " + std::to_string(ex.w) + " fault(s), fewer than t = " + std::to_string(t);
+            const std::string why2 = !ex.readable
+                ? std::string("an SE measures something that is not a product of the code's generators")
+                : have < need ? "m = " + std::to_string(m) + " needs " + std::to_string(need) +
+                                " identical unflagged full rounds at the end, the record has " + std::to_string(have)
+                              : "other records of this path with " + std::to_string(c) +
+                                " detected fault(s) do not end that way, so the guards do not force it";
+            cls.example = ValidityFailure{terminal.path_id, terminal.terminal_action, record,
+                "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + facts.weight_detail};
+        }
     }
 
   public:
-    // Decide every path, and check the flag condition of every path that
-    // satisfies Cond 2 (Def. 3.9 (2)), whichever condition settles it.
+    // Settle Cond 2 class by class, report the paths with a record nothing
+    // settles, and check the flag condition of every class that has the form
+    // of Cond 2 (Def. 3.9 (2)), whichever condition settles its records.
     void finish() {
         const int t = dag_.code.fault_budget();
         for (auto& [path_id, path] : paths_) {
-            const int m = path.min_w;
-            const bool c1 = path.all_same && m >= t;
-            const std::size_t need = m < t ? static_cast<std::size_t>(t - m + 1) : 0;
-            const bool c2 = path.readable && m < t && path.min_suffix >= need;
-            const bool c3 = path.all3;
-            if (path.decode && c1) ++result_.by_condition[0];
-            else if (path.decode && c2) ++result_.by_condition[1];
-            else if (c3) ++result_.by_condition[2];
-            else {
-                const std::string ms = std::to_string(m);
-                std::string why1 = !path.all_same ? path.why_syndrome
-                                 : "a record exposes only " + ms + " fault(s), fewer than t = " + std::to_string(t);
-                std::string why2 = !path.readable ? std::string("an SE measures something that is not a product of the code's generators")
-                                 : m >= t ? "m = " + ms + " is not fewer than t"
-                                 : "m = " + ms + " needs " + std::to_string(need) + " identical unflagged full rounds at the end, a record has " + std::to_string(path.min_suffix);
-                std::string reason;
-                std::vector<RecordEntry> example;
-                if (path.decode) {
-                    reason  = "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + path.why3;
-                    example = !path.all_same ? path.ex_syndrome : path.ex_min_w;
-                } else {
-                    reason  = "ends without decoding, so only Cond 3 applies, but " + path.why3;
-                    example = path.ex3;
+            std::optional<ValidityFailure> example = path.example;
+            std::size_t failing = path.failing;
+            bool strict_bug = path.failing > 0;
+            for (auto& [c, cls] : path.classes) {
+                if (!cls.form && cls.needing_strict) strict_bug = true;
+                if (cls.form) { result_.by_condition[1] += cls.needing; }
+                else if (cls.needing) {
+                    failing += cls.needing;
+                    if (!example) example = cls.example;
                 }
-                result_.validity_failures.push_back(
-                    ValidityFailure{path_id, path.decode ? "decode" : "end", example, reason});
-                extra_invalid_records_ += path.records - 1;
+                if (!cls.form) continue;
+                const int k = t - std::min(c, t - 1);
+                for (const auto& [key, slot] : cls.flags) {
+                    const CircuitRef& circuit = *slot.first;
+                    std::optional<std::string> problem;
+                    if (k > 0) problem = backend_.flag_condition(circuit, k);
+                    if (!problem && !flags_ignore(circuit)) problem = std::string("raises a flag without any fault");
+                    if (!problem) continue;
+                    FlagFailure* entry = nullptr;
+                    for (auto& f : result_.flag_failures) {
+                        if (f.se_name == circuit.se_name && f.k == k) entry = &f;
+                    }
+                    if (!entry) {
+                        result_.flag_failures.push_back(
+                            FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, cls.flags_example});
+                        entry = &result_.flag_failures.back();
+                    }
+                    entry->paths.insert(path_id);
+                    entry->records += slot.second;
+                }
             }
-            if (!c2) continue;
-            const int k = t - m;
-            for (const auto& [key, slot] : path.suffix[need]) {
-                const CircuitRef& circuit = *slot.first;
-                std::optional<std::string> problem;
-                if (k > 0) problem = backend_.flag_condition(circuit, k);
-                if (!problem && !flags_ignore(circuit)) problem = std::string("raises a flag without any fault");
-                if (!problem) continue;
-                FlagFailure* entry = nullptr;
-                for (auto& f : result_.flag_failures) {
-                    if (f.se_name == circuit.se_name && f.k == k) entry = &f;
-                }
-                if (!entry) {
-                    result_.flag_failures.push_back(
-                        FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, path.ex_min_w});
-                    entry = &result_.flag_failures.back();
-                }
-                entry->paths.insert(path_id);
-                entry->records += slot.second;
+            if (strict_bug) ++result_.invalid_paths_strict;
+            if (example) {
+                result_.validity_failures.push_back(*example);
+                extra_invalid_records_ += failing - 1;
             }
         }
         result_.invalid_records = result_.validity_failures.size() + extra_invalid_records_;
