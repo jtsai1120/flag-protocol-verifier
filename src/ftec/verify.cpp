@@ -390,8 +390,10 @@ private:
 
     // Faults the record exposes (detected-fault lower bound, after CB18
     // Secs. 2.2 and 3.1). The measurements are grouped into rounds (a round
-    // ends when a generator is about to be measured again). A raised flag is
-    // one detected fault, and afterwards nothing measured earlier is trusted.
+    // ends when a generator is about to be measured again). Each SE circuit of
+    // a round that raises a flag is one detected fault (one fault sits in one
+    // circuit, and data errors raise no flag), and afterwards nothing measured
+    // earlier is trusted.
     // An unflagged round is compared with what is known of the syndrome --
     // initially the trivial syndrome, since the input is a codeword up to the
     // input error -- and a disagreement is one detected fault, except that the
@@ -406,6 +408,7 @@ private:
         struct Round {
             std::vector<std::pair<std::uint64_t, bool>> bits;   // generator mask, value
             bool                     flagged = false;
+            int                      flagged_ses = 0;          // SEs of the round that raised a flag
             bool                     full    = false;          // spans every generator
             std::vector<std::size_t> entries;
         };
@@ -433,7 +436,9 @@ private:
             for (std::size_t j = 0; j < masks.size() && j < record[i].outcome.syndrome.size(); ++j) {
                 if (masks[j]) round.bits.emplace_back(*masks[j], record[i].outcome.syndrome[j]);
             }
-            for (const bool f : record[i].outcome.flag) round.flagged = round.flagged || f;
+            bool raised = false;
+            for (const bool f : record[i].outcome.flag) raised = raised || f;
+            if (raised) { round.flagged = true; ++round.flagged_ses; }
             round.entries.push_back(i);
         }
         for (auto& round : ex.rounds) {
@@ -446,7 +451,7 @@ private:
         for (std::size_t g = 0; g < r; ++g) known.emplace_back(std::uint64_t{1} << g, false);
         bool skip = false;
         for (const auto& round : ex.rounds) {
-            if (round.flagged) { ++ex.w; known.clear(); skip = false; continue; }
+            if (round.flagged) { ex.w += round.flagged_ses; known.clear(); skip = false; continue; }
             bool compared = false, changed = false;
             for (const auto& [mask, value] : round.bits) {
                 if (const auto p = predict(known, mask)) {
