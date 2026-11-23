@@ -121,7 +121,7 @@
         meta.append(', ');
         meta.append(el('span', { className: good ? 'good' : 'bad', textContent: text }));
       }
-      if (p.native_seconds === null) meta.append(outOfMemory(p) ? '' : ', did not finish natively');
+      if (p.native_seconds === null) meta.append(outOfMemory(p) ? '' : p.verdicts ? ', did not finish natively' : ', not run with the current checks');
       else if (p.native_seconds >= 1) meta.append(`, ${human(p.native_seconds * WASM_SLOWDOWN)} here`);
       if (ws && ws.edited) meta.append(', edited');
     } else {
@@ -193,7 +193,8 @@
       note.className = 'notice warn';
       note.textContent = outOfMemory(p)
         ? `This protocol ran out of memory natively (${p.verdicts.status}). It will run out of memory here too.`
-        : 'This protocol did not finish natively. It will very likely run out of time or memory here.';
+        : p.verdicts ? 'This protocol did not finish natively. It will very likely run out of time or memory here.'
+        : 'This protocol has not been run with the current checks. Natively it took about an hour, so it is very likely too large for the browser.';
     } else if (p.native_seconds >= 60) {
       note.className = 'notice warn';
       note.textContent = `Expect ${human(p.native_seconds * WASM_SLOWDOWN)} in the browser (${human(p.native_seconds)} natively). The page stays usable; Stop ends the run.`;
