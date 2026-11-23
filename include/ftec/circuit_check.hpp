@@ -24,13 +24,15 @@
 //     and never touches a qubit while that qubit is measured or reset: the
 //     circuit leaves the encoded state alone.
 //
-// Signs. A measurement that deterministically reads 1 (it observes -s), or a
-// logical operator that comes out as -L, is a warning rather than an error.
-// A syndrome row may declare its sign in g: as -[...]: the bit then reads 1
-// without errors by design, and the check warns only when the declaration and
-// the circuit disagree. The verifier records outcomes as flips; branch guards
-// see a -[...] bit as read (flip XOR 1), validity and correctability use the
-// flips.
+// Signs (Thm. 3.4 keeps them). An error-free run must read 0 on every
+// ancilla and leave every logical operator with its sign; a measurement that
+// deterministically reads 1 (it observes -s), or a logical that comes out as
+// -L, makes the circuit invalid. One exception, an FPDL extension: a syndrome
+// row may declare its sign in g: as -[...], meaning the bit is read inverted
+// (a classical NOT on the readout), so it reads 1 without errors by design;
+// the declaration must then match the circuit. The verifier records outcomes
+// as flips; branch guards see a -[...] bit as read (flip XOR 1), validity and
+// correctability use the flips.
 //
 // A flag measurement that observes a stabilizer other than the identity is
 // valid here; it does violate part (2) of the flag condition, which protocol

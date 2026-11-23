@@ -42,8 +42,9 @@ struct PathFailure {
     [[nodiscard]] std::string record_string() const;   // "01|1|0"
 };
 
-// A terminal at which the protocol is not valid (Def. 3.9): none of the three
-// control-flow conditions holds for what can have happened along this record.
+// A terminating path that satisfies none of Conditions 1-3 of Def. 3.9 (a
+// path satisfies a condition when every record on it does); one per path,
+// with an example record.
 struct ValidityFailure {
     std::size_t              path_id = 0;
     std::string              terminal_action;
@@ -53,10 +54,10 @@ struct ValidityFailure {
     [[nodiscard]] std::string record_string() const;
 };
 
-// A circuit used in the repeated suffix of a record that has the form of
-// Condition 2 but does not satisfy the (t - w)-flag condition (Def. 3.10 (3)),
-// or raises a flag without any fault (Def. 3.7 (2)). One entry per circuit
-// and k, with the first record that needed it.
+// A circuit used in the repeated suffix of a path that satisfies Condition 2
+// but does not satisfy the (t - m)-flag condition (Def. 3.9 (2), Def. 3.7):
+// part (1), or a flag raised without any fault (part (2)). One entry per
+// circuit and k, with an example record.
 struct FlagFailure {
     std::string              se_name;
     int                      k = 0;
@@ -75,15 +76,15 @@ struct VerifyOptions {
     // min_fault_count is taken over everything seen so far.
     bool stop_at_first_failure = false;
 
-    // Protocol validity (Def. 3.10), checked as in the paper's algorithm:
-    //   control flow (Def. 3.9): a terminal that decodes needs Cond 1 (the
-    //     record determines the ideal syndrome) or Cond 2 (it ends in t - w + 1
-    //     identical, unflagged, full rounds, w counting the faults it exposes);
-    //     a terminal that ends without decoding needs Cond 3 (an error from s
-    //     faults is within weight s of the code space);
-    //   flag condition (Def. 3.10 (3)): wherever a record has the form of
-    //     Cond 2, the circuits of its repeated suffix satisfy the
-    //     (t - w)-flag condition, whether or not Cond 1 also holds.
+    // Protocol validity (Def. 3.9), path by path, as in Algorithm 1:
+    //   (1) every terminating path satisfies Cond 1 (its records show t
+    //     detected faults and leave residual errors of one ideal syndrome
+    //     each), Cond 2 (m < t detected faults, then t - m + 1 identical,
+    //     unflagged full rounds) or Cond 3 (input weight r plus s faults,
+    //     r + s <= t, leave minimum weight <= s); an end() path applies no
+    //     correction and needs Cond 3;
+    //   (2) every path satisfying Cond 2 has its repeated suffix satisfy the
+    //     (t - m)-flag condition, whichever condition settles the path.
     bool check_validity = true;
 };
 
@@ -102,14 +103,14 @@ struct VerifyResult {
     int         min_fault_count  = -1;  // fewest faults that break the protocol
     std::vector<PathFailure> failures;
 
-    // Protocol validity, when checked: how many terminal records each
-    // condition settled (decoding terminals: Cond 1, else Cond 2; ending
-    // terminals: Cond 3), the records none did (control-flow bugs), and the
-    // circuits that fail the flag condition a Cond 2 suffix needs (flag bugs).
+    // Protocol validity, when checked: how many terminating paths each
+    // condition settled (first of 1, 2, 3 that holds), the paths none did
+    // (control-flow bugs), and the circuits that fail the flag condition a
+    // Cond 2 suffix needs (flag bugs).
     bool                         validity_checked = false;
     double                       validity_seconds = 0;   // all validity work at terminals
     std::size_t                  by_condition[3]  = {0, 0, 0};
-    std::vector<ValidityFailure> validity_failures;   // at most one per decoding path
+    std::vector<ValidityFailure> validity_failures;   // one per invalid path
     std::size_t                  invalid_records = 0; // all records behind them
     std::vector<FlagFailure>     flag_failures;
 

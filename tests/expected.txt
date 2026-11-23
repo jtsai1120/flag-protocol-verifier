@@ -1,14 +1,15 @@
 # Expected verdict of every distance-3 protocol, one line each, as fqcv_tests prints it.
 # Cross-checked against an independent hand-written BuDDy backend when this file was made.
 # Regenerate with: build/fqcv_tests --print <protocol.fpdl>...
-# cond=a/b/c: terminal records settled by control-flow Conditions 1/2/3; invalid: records of the
-# control-flow bugs (decoding terminals need Cond 1 or 2, ending ones Cond 3); flagbugs: circuits
-# failing the (t - w)-flag condition a Cond 2 path needs (Def. 3.10 (3)).
-Bha23_[[5,1,3]]	paths=13 records=97 circuits=64 min_t=-1 failures=0 cond=76/0/1 invalid=20 [invalid path 2] [invalid path 3] [invalid path 5] [invalid path 6] [invalid path 9] [invalid path 10] [invalid path 11] [invalid path 12] flagbugs=0
-Bha23_[[7,1,3]]_fig5	paths=19 records=157 circuits=126 min_t=-1 failures=0 cond=150/0/1 invalid=6 [invalid path 0] [invalid path 1] [invalid path 4] [invalid path 7] [invalid path 10] [invalid path 13] flagbugs=0
-Bha23_[[7,1,3]]_fig6	paths=4 records=140 circuits=12 min_t=-1 failures=0 cond=139/0/1 invalid=0 flagbugs=0
-CR17_[[5,1,3]]	paths=5 records=117 circuits=16 min_t=-1 failures=0 cond=116/0/1 invalid=0 flagbugs=0
-LL25_[[5,1,3]]_[1,1,1,1]^T	paths=2 records=117 circuits=40 min_t=-1 failures=0 cond=116/0/1 invalid=0 flagbugs=0
-LL25_[[5,1,3]]_[2,2]	paths=2 records=134 circuits=36 min_t=1 failures=4 [path 1 t=1 record=0001,01|0011] [path 1 t=1 record=0001,01|0111] [path 1 t=1 record=0011,10|1001] [path 1 t=1 record=0111,10|1111] cond=133/0/1 invalid=0 flagbugs=0
-LL25_[[5,1,3]]_[2,2]^T	paths=2 records=153 circuits=36 min_t=1 failures=1 [path 1 t=1 record=0001,01|0011] cond=152/0/1 invalid=0 flagbugs=0
-LL25_[[5,1,3]]_[2,2]^T_fix_2	paths=2 records=127 circuits=34 min_t=1 failures=4 [path 1 t=1 record=0100,01|1000] [path 1 t=1 record=1100,01|1000] [path 1 t=1 record=0101,10|0110] [path 1 t=1 record=0111,10|0110] cond=126/0/1 invalid=0 flagbugs=0
+# cond=a/b/c: terminating paths settled by Conditions 1/2/3 of Def. 3.9 (a path satisfies a
+# condition when every record on it does; decoding paths may use any, ending ones only Cond 3);
+# invalid: records on the control-flow bug paths; flagbugs: circuits failing the (t - m)-flag
+# condition a Cond 2 path needs (Def. 3.9 (2)).
+Bha23_[[5,1,3]]	paths=13 records=97 circuits=64 min_t=-1 failures=0 cond=4/0/1 invalid=44 [invalid path 2] [invalid path 3] [invalid path 5] [invalid path 6] [invalid path 9] [invalid path 10] [invalid path 11] [invalid path 12] flagbugs=0
+Bha23_[[7,1,3]]_fig5	paths=19 records=157 circuits=126 min_t=-1 failures=0 cond=12/0/1 invalid=60 [invalid path 0] [invalid path 1] [invalid path 4] [invalid path 7] [invalid path 10] [invalid path 13] flagbugs=0
+Bha23_[[7,1,3]]_fig6	paths=4 records=140 circuits=12 min_t=-1 failures=0 cond=3/0/1 invalid=0 flagbugs=0
+CR17_[[5,1,3]]	paths=5 records=117 circuits=16 min_t=-1 failures=0 cond=4/0/1 invalid=0 flagbugs=0
+LL25_[[5,1,3]]_[1,1,1,1]^T	paths=2 records=117 circuits=40 min_t=-1 failures=0 cond=1/0/1 invalid=0 flagbugs=0
+LL25_[[5,1,3]]_[2,2]	paths=2 records=134 circuits=36 min_t=1 failures=4 [path 1 t=1 record=0001,01|0011] [path 1 t=1 record=0001,01|0111] [path 1 t=1 record=0011,10|1001] [path 1 t=1 record=0111,10|1111] cond=1/0/1 invalid=0 flagbugs=0
+LL25_[[5,1,3]]_[2,2]^T	paths=2 records=153 circuits=36 min_t=1 failures=1 [path 1 t=1 record=0001,01|0011] cond=1/0/1 invalid=0 flagbugs=0
+LL25_[[5,1,3]]_[2,2]^T_fix_2	paths=2 records=127 circuits=34 min_t=1 failures=4 [path 1 t=1 record=0100,01|1000] [path 1 t=1 record=1100,01|1000] [path 1 t=1 record=0101,10|0110] [path 1 t=1 record=0111,10|0110] cond=1/0/1 invalid=0 flagbugs=0

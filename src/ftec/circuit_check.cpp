@@ -434,8 +434,9 @@ CircuitReport check_circuits(const Dag& dag) {
         try {
             const auto program = parse_qasm_file(c.qasm);
             for (const auto& problem : check_circuit(program, c, dag.code.generators, logicals)) {
-                (problem.kind == CircuitIssue::Kind::Sign ? report.warnings : report.errors)
-                    .push_back(where + ", " + problem.to_string());
+                // Def. 3.2 / Thm. 3.4 keep signs: an error-free run reads 0
+                // on every ancilla and leaves every logical with its sign.
+                report.errors.push_back(where + ", " + problem.to_string());
             }
         } catch (const std::exception& error) {
             report.errors.push_back(where + ": " + error.what());

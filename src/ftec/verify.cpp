@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <set>
 #include <stdexcept>
@@ -371,103 +372,260 @@ private:
             PathFailure{terminal.path_id, terminal.terminal_action, record, failure});
     }
 
-    // ---- protocol validity -------------------------------------------------
+    // ---- protocol validity (Def. 3.9) ---------------------------------------
+    //
+    // Def. 3.9 is a property of terminating paths. Every record that reaches a
+    // terminal is checked against the three conditions; a path satisfies a
+    // condition when every record on it does, and the path is valid when one
+    // condition holds for the whole path:
+    //   Cond 1  the record shows t detected faults, and all residual errors of
+    //           the record have one ideal syndrome (phi_CF1 of Eq. 14 is unsat);
+    //   Cond 2  m < t detected faults, then t - m + 1 consecutive identical,
+    //           unflagged full rounds (structural, no faults searched);
+    //   Cond 3  every residual error from input weight r and s faults,
+    //           r + s <= t, has minimum weight <= s.
+    // A decode() terminal may use any of them (Thm. 3.10 builds the decoder;
+    // under Cond 3 it applies no correction). An end() terminal applies no
+    // correction by construction, so only Cond 3 can justify it (Sec. 4.1.3).
+    // Part (2) of Def. 3.9: every path satisfying Cond 2 needs the
+    // (t - m)-flag condition on its repeated suffix, whichever condition
+    // settles the path.
 
-    // The form of Condition 2, read off the record (structural, no faults
-    // searched): w faults exposed, then t - w + 1 identical, unflagged, full
-    // rounds. The flag condition of the suffix is checked separately.
-    struct Cond2 {
-        bool                     holds = false;
-        int                      k     = 0;        // t - w
-        std::vector<std::size_t> suffix;           // record entries of the repeated rounds
-        std::string              why_not;
+    // Faults the record exposes (detected-fault lower bound, after CB18
+    // Secs. 2.2 and 3.1). The measurements are grouped into rounds (a round
+    // ends when a generator is about to be measured again). A raised flag is
+    // one detected fault, and afterwards nothing measured earlier is trusted.
+    // An unflagged round is compared with what is known of the syndrome --
+    // initially the trivial syndrome, since the input is a codeword up to the
+    // input error -- and a disagreement is one detected fault, except that the
+    // disagreement right after a counted one may be the same fault seen twice
+    // (CB18's rule for consecutive rounds). Knowledge is kept as GF(2)
+    // equations over the generators, so a bit that measures a product of
+    // generators is compared too. After a disagreement only the new round is
+    // trusted.
+    struct Exposure {
+        int                      w = 0;
+        std::vector<std::size_t> round_of;   // record entry -> round index
+        struct Round {
+            std::vector<std::pair<std::uint64_t, bool>> bits;   // generator mask, value
+            bool                     flagged = false;
+            bool                     full    = false;          // spans every generator
+            std::vector<std::size_t> entries;
+        };
+        std::vector<Round> rounds;
+        bool readable = true;   // every bit is a product of generators
     };
 
-    // Condition 2 is a property of a path (its guards make the suffix
-    // repeat), not of a record that happens to repeat. A path counts as having
-    // the form of Cond 2 when every record reaching it has that form; this is
-    // only known once the walk is over, so the records that need Cond 2 and
-    // the flag conditions it asks for are kept per path until finish().
-    struct PathCond2 {
-        bool                                    every_record = true;
-        int                                     k = -1;        // t - w, the same on every record
-        std::map<std::pair<std::string, int>, std::pair<const CircuitRef*, std::size_t>> flags;
-        std::vector<RecordEntry>                flags_example;
-        std::size_t                             needing = 0;   // records Cond 1 does not settle
-        std::optional<ValidityFailure>          needing_example;
-        std::size_t                             settled_by_2 = 0;
+    Exposure exposure(const std::vector<RecordEntry>& record) {
+        Exposure ex;
+        const std::size_t r = dag_.code.generators.size();
+        if (r > 64) throw std::runtime_error("protocol validity supports at most 64 stabilizer generators");
+        // rounds
+        for (std::size_t i = 0; i < record.size(); ++i) {
+            const auto& masks = masks_of(dag_.nodes[record[i].node].circuit);
+            std::uint64_t seen = 0;
+            for (const auto& b : ex.rounds.empty() ? std::vector<std::pair<std::uint64_t, bool>>{}
+                                                   : ex.rounds.back().bits) seen |= b.first;
+            bool overlap = ex.rounds.empty();
+            for (const auto& m : masks) {
+                if (!m) { ex.readable = false; continue; }
+                if (!ex.rounds.empty() && (seen & *m)) overlap = true;
+            }
+            if (overlap) ex.rounds.emplace_back();
+            auto& round = ex.rounds.back();
+            for (std::size_t j = 0; j < masks.size() && j < record[i].outcome.syndrome.size(); ++j) {
+                if (masks[j]) round.bits.emplace_back(*masks[j], record[i].outcome.syndrome[j]);
+            }
+            for (const bool f : record[i].outcome.flag) round.flagged = round.flagged || f;
+            round.entries.push_back(i);
+        }
+        for (auto& round : ex.rounds) {
+            std::vector<std::uint64_t> masks;
+            for (const auto& b : round.bits) masks.push_back(b.first);
+            round.full = rank(masks) == r;
+        }
+        // count
+        std::vector<std::pair<std::uint64_t, bool>> known;   // reduced rows
+        for (std::size_t g = 0; g < r; ++g) known.emplace_back(std::uint64_t{1} << g, false);
+        bool skip = false;
+        for (const auto& round : ex.rounds) {
+            if (round.flagged) { ++ex.w; known.clear(); skip = false; continue; }
+            bool compared = false, changed = false;
+            for (const auto& [mask, value] : round.bits) {
+                if (const auto p = predict(known, mask)) {
+                    compared = true;
+                    if (*p != value) changed = true;
+                }
+            }
+            if (compared) {
+                if (changed) { if (!skip) ++ex.w; skip = !skip; }
+                else skip = false;
+            }
+            if (changed) known.clear();
+            for (const auto& b : round.bits) learn(known, b.first, b.second);
+        }
+        return ex;
+    }
+
+    static int rank(std::vector<std::uint64_t> rows) {
+        int rk = 0;
+        for (int bit = 63; bit >= 0; --bit) {
+            const std::uint64_t m = std::uint64_t{1} << bit;
+            auto pivot = std::find_if(rows.begin() + rk, rows.end(), [&](std::uint64_t v) { return v & m; });
+            if (pivot == rows.end()) continue;
+            std::swap(*pivot, rows[static_cast<std::size_t>(rk)]);
+            for (std::size_t i = 0; i < rows.size(); ++i) {
+                if (i != static_cast<std::size_t>(rk) && (rows[i] & m)) rows[i] ^= rows[static_cast<std::size_t>(rk)];
+            }
+            ++rk;
+        }
+        return rk;
+    }
+    // Value of the product `mask` if the known equations fix it.
+    static std::optional<bool> predict(const std::vector<std::pair<std::uint64_t, bool>>& known,
+                                       std::uint64_t mask) {
+        bool value = false;
+        for (const auto& [row, v] : known) {   // rows are reduced: distinct leading bits
+            const std::uint64_t lead = std::uint64_t{1} << (63 - __builtin_clzll(row));
+            if (mask & lead) { mask ^= row; value ^= v; }
+        }
+        if (mask) return std::nullopt;
+        return value;
+    }
+    static void learn(std::vector<std::pair<std::uint64_t, bool>>& known, std::uint64_t mask, bool value) {
+        for (const auto& [row, v] : known) {
+            const std::uint64_t lead = std::uint64_t{1} << (63 - __builtin_clzll(row));
+            if (mask & lead) { mask ^= row; value ^= v; }
+        }
+        if (!mask) return;   // already implied
+        const std::uint64_t lead = std::uint64_t{1} << (63 - __builtin_clzll(mask));
+        for (auto& [row, v] : known) {
+            if (row & lead) { row ^= mask; v ^= value; }
+        }
+        known.emplace_back(mask, value);
+    }
+
+    // Trailing rounds of the record that are full, unflagged and identical
+    // to the last one (0 if a bit is not a product of generators).
+    static std::size_t repeated_suffix(const Exposure& ex) {
+        if (!ex.readable || ex.rounds.empty()) return 0;
+        const auto& last = ex.rounds.back();
+        std::size_t n = 0;
+        for (auto it = ex.rounds.rbegin(); it != ex.rounds.rend(); ++it) {
+            if (!it->full || it->flagged || it->bits != last.bits) break;
+            ++n;
+        }
+        return n;
+    }
+
+    // Per terminating path. A path satisfies a condition when every record
+    // on it does. The detected-fault lower bound m of a path is the least w
+    // over its records (what its guards guarantee to have been exposed).
+    struct PathState {
+        bool                     decode = true;
+        std::size_t              records = 0;
+        bool                     all_same = true;   // Cond 1: one ideal syndrome per record
+        bool                     all3 = true;       // Cond 3
+        int                      min_w = 1 << 20;
+        std::size_t              min_suffix = static_cast<std::size_t>(-1);
+        bool                     readable = true;
+        std::string              why_syndrome, why3;
+        std::vector<RecordEntry> ex_syndrome, ex_min_w, ex_min_suffix, ex3;
+        // need (number of repeated rounds) -> circuit -> (circuit, records)
+        std::map<std::size_t, std::map<std::string, std::pair<const CircuitRef*, std::size_t>>> suffix;
     };
-    std::map<std::size_t, PathCond2> cond2_;
+    std::map<std::size_t, PathState> paths_;
 
     void check_validity(const DagNode& terminal, Backend::StateId state,
                         const std::vector<RecordEntry>& record) {
         const auto facts = backend_.terminal_facts(state);
-        if (terminal.terminal_action == "end") {
-            if (facts.weight_bounded) { ++result_.by_condition[2]; return; }
-            result_.validity_failures.push_back(ValidityFailure{
-                terminal.path_id, terminal.terminal_action, record,
-                "ends without decoding, but " + facts.weight_detail});
-            return;
+        const Exposure ex = exposure(record);
+        const std::size_t t = static_cast<std::size_t>(dag_.code.fault_budget());
+        PathState& path = paths_[terminal.path_id];
+        path.decode = terminal.terminal_action != "end";
+        ++path.records;
+
+        if (!facts.same_syndrome && path.all_same) {
+            path.all_same = false;
+            path.why_syndrome = facts.syndrome_detail;
+            path.ex_syndrome = record;
         }
-        PathCond2& path = cond2_[terminal.path_id];
-        const Cond2 form = condition_2(record);
-        // The guards make the suffix repeat only if every record has it.
-        if (!form.holds) {
-            path.every_record = false;
-        } else if (path.every_record) {
-            if (path.flags_example.empty()) path.flags_example = record;
-            for (const std::size_t e : form.suffix) {
-                const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
-                auto& slot = path.flags[{circuit.qasm.string() + "\n" + circuit.se_name, form.k}];
-                slot.first = &circuit;
-                ++slot.second;
+        if (!facts.weight_bounded && path.all3) {
+            path.all3 = false;
+            path.why3 = facts.weight_detail;
+            path.ex3 = record;
+        }
+        if (ex.w < path.min_w) { path.min_w = ex.w; path.ex_min_w = record; }
+        if (!ex.readable) path.readable = false;
+        const std::size_t n = repeated_suffix(ex);
+        if (n < path.min_suffix) { path.min_suffix = n; path.ex_min_suffix = record; }
+        // The circuits of the last `need` rounds, for every need this record allows.
+        for (std::size_t need = 1; need <= std::min(n, t + 1); ++need) {
+            auto& slot_map = path.suffix[need];
+            for (std::size_t r = ex.rounds.size() - need; r < ex.rounds.size(); ++r) {
+                for (const std::size_t e : ex.rounds[r].entries) {
+                    const CircuitRef& circuit = dag_.nodes[record[e].node].circuit;
+                    auto& slot = slot_map[circuit.qasm.string() + "\n" + circuit.se_name];
+                    slot.first = &circuit;
+                    ++slot.second;
+                }
             }
-        }
-        if (facts.same_syndrome) { ++result_.by_condition[0]; return; }
-        ++path.needing;
-        if (!path.needing_example) {
-            path.needing_example = ValidityFailure{
-                terminal.path_id, terminal.terminal_action, record,
-                "Cond 1: " + facts.syndrome_detail + "; Cond 2: " +
-                    (form.holds ? std::string("other records of this path do not repeat")
-                                : form.why_not)};
         }
     }
 
   public:
-    // Settle Cond 2 path by path, and check the flag condition of every path
-    // that has its form (Def. 3.10 (3)), whichever condition settles it.
+    // Decide every path, and check the flag condition of every path that
+    // satisfies Cond 2 (Def. 3.9 (2)), whichever condition settles it.
     void finish() {
-        for (auto& [path_id, path] : cond2_) {
-            if (path.every_record) {
-                result_.by_condition[1] += path.needing;
-                for (const auto& [key, slot] : path.flags) {
-                    const CircuitRef& circuit = *slot.first;
-                    const int k = key.second;
-                    std::optional<std::string> problem;
-                    if (k > 0) problem = backend_.flag_condition(circuit, k);
-                    if (!problem && !flags_ignore(circuit)) {
-                        problem = std::string("raises a flag without any fault");
-                    }
-                    if (!problem) continue;
-                    FlagFailure* entry = nullptr;
-                    for (auto& f : result_.flag_failures) {
-                        if (f.se_name == circuit.se_name && f.k == k) entry = &f;
-                    }
-                    if (!entry) {
-                        result_.flag_failures.push_back(
-                            FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, path.flags_example});
-                        entry = &result_.flag_failures.back();
-                    }
-                    entry->paths.insert(path_id);
-                    entry->records += slot.second;
+        const int t = dag_.code.fault_budget();
+        for (auto& [path_id, path] : paths_) {
+            const int m = path.min_w;
+            const bool c1 = path.all_same && m >= t;
+            const std::size_t need = m < t ? static_cast<std::size_t>(t - m + 1) : 0;
+            const bool c2 = path.readable && m < t && path.min_suffix >= need;
+            const bool c3 = path.all3;
+            if (path.decode && c1) ++result_.by_condition[0];
+            else if (path.decode && c2) ++result_.by_condition[1];
+            else if (c3) ++result_.by_condition[2];
+            else {
+                const std::string ms = std::to_string(m);
+                std::string why1 = !path.all_same ? path.why_syndrome
+                                 : "a record exposes only " + ms + " fault(s), fewer than t = " + std::to_string(t);
+                std::string why2 = !path.readable ? std::string("an SE measures something that is not a product of the code's generators")
+                                 : m >= t ? "m = " + ms + " is not fewer than t"
+                                 : "m = " + ms + " needs " + std::to_string(need) + " identical unflagged full rounds at the end, a record has " + std::to_string(path.min_suffix);
+                std::string reason;
+                std::vector<RecordEntry> example;
+                if (path.decode) {
+                    reason  = "Cond 1: " + why1 + "; Cond 2: " + why2 + "; Cond 3: " + path.why3;
+                    example = !path.all_same ? path.ex_syndrome : path.ex_min_w;
+                } else {
+                    reason  = "ends without decoding, so only Cond 3 applies, but " + path.why3;
+                    example = path.ex3;
                 }
-            } else if (path.needing_example) {
-                // Cond 1 fails on these records and the path has no Cond 2 form.
-                for (std::size_t i = 0; i < path.needing; ++i) {
-                    if (i == 0) result_.validity_failures.push_back(*path.needing_example);
-                    else ++extra_invalid_records_;
+                result_.validity_failures.push_back(
+                    ValidityFailure{path_id, path.decode ? "decode" : "end", example, reason});
+                extra_invalid_records_ += path.records - 1;
+            }
+            if (!c2) continue;
+            const int k = t - m;
+            for (const auto& [key, slot] : path.suffix[need]) {
+                const CircuitRef& circuit = *slot.first;
+                std::optional<std::string> problem;
+                if (k > 0) problem = backend_.flag_condition(circuit, k);
+                if (!problem && !flags_ignore(circuit)) problem = std::string("raises a flag without any fault");
+                if (!problem) continue;
+                FlagFailure* entry = nullptr;
+                for (auto& f : result_.flag_failures) {
+                    if (f.se_name == circuit.se_name && f.k == k) entry = &f;
                 }
+                if (!entry) {
+                    result_.flag_failures.push_back(
+                        FlagFailure{circuit.se_name, k, *problem, {}, 0, path_id, path.ex_min_w});
+                    entry = &result_.flag_failures.back();
+                }
+                entry->paths.insert(path_id);
+                entry->records += slot.second;
             }
         }
         result_.invalid_records = result_.validity_failures.size() + extra_invalid_records_;
@@ -476,27 +634,54 @@ private:
   private:
     std::size_t extra_invalid_records_ = 0;
 
-    // One round of syndrome extraction, reassembled from consecutive SEs.
-    struct Round {
-        std::map<std::size_t, bool> syndrome;   // generator index -> bit
-        bool                        flagged = false;
-        std::vector<std::size_t>    entries;    // into the record
-    };
-
-    // Which code generator each bit of an SE reports, or nullopt for a bit
-    // that is not one of them (a product, say).
-    const std::vector<std::optional<std::size_t>>& bits_of(const CircuitRef& circuit) {
+    // Each bit of an SE as a product of the code's generators (a bit mask
+    // over them), or nullopt if it is not in the stabilizer group (up to
+    // sign). Pauli strings are compared as binary symplectic vectors.
+    const std::vector<std::optional<std::uint64_t>>& masks_of(const CircuitRef& circuit) {
         const std::string key = circuit.qasm.string() + "\n" + circuit.se_name;
-        if (const auto found = bits_.find(key); found != bits_.end()) return found->second;
-        std::vector<std::optional<std::size_t>> bits;
-        for (const auto& g : circuit.measures) {
-            std::optional<std::size_t> index;
-            for (std::size_t i = 0; i < dag_.code.generators.size(); ++i) {
-                if (dag_.code.generators[i] == g) index = i;
+        if (const auto found = masks_.find(key); found != masks_.end()) return found->second;
+        const auto& gens = dag_.code.generators;
+        const auto vec = [](const std::string& p) {
+            std::vector<bool> v(2 * p.size());
+            for (std::size_t q = 0; q < p.size(); ++q) {
+                v[2 * q]     = p[q] == 'X' || p[q] == 'Y';
+                v[2 * q + 1] = p[q] == 'Z' || p[q] == 'Y';
             }
-            bits.push_back(index);
+            return v;
+        };
+        // Row-reduce the generators, remembering each row as a combination.
+        std::vector<std::pair<std::vector<bool>, std::uint64_t>> rows;
+        for (std::size_t g = 0; g < gens.size(); ++g) rows.emplace_back(vec(gens[g]), std::uint64_t{1} << g);
+        std::vector<std::size_t> pivots;
+        std::size_t rk = 0;
+        const std::size_t width = rows.empty() ? 0 : rows[0].first.size();
+        for (std::size_t c = 0; c < width && rk < rows.size(); ++c) {
+            std::size_t p = rk;
+            while (p < rows.size() && !rows[p].first[c]) ++p;
+            if (p == rows.size()) continue;
+            std::swap(rows[p], rows[rk]);
+            for (std::size_t i = 0; i < rows.size(); ++i) {
+                if (i == rk || !rows[i].first[c]) continue;
+                for (std::size_t j = 0; j < width; ++j) rows[i].first[j] = rows[i].first[j] ^ rows[rk].first[j];
+                rows[i].second ^= rows[rk].second;
+            }
+            pivots.push_back(c);
+            ++rk;
         }
-        return bits_.emplace(key, std::move(bits)).first->second;
+        std::vector<std::optional<std::uint64_t>> out;
+        for (const auto& m : circuit.measures) {
+            auto v = vec(m);
+            if (v.size() != width) { out.push_back(std::nullopt); continue; }
+            std::uint64_t mask = 0;
+            for (std::size_t i = 0; i < pivots.size(); ++i) {
+                if (!v[pivots[i]]) continue;
+                for (std::size_t j = 0; j < width; ++j) v[j] = v[j] ^ rows[i].first[j];
+                mask ^= rows[i].second;
+            }
+            const bool zero = std::none_of(v.begin(), v.end(), [](bool b) { return b; });
+            out.push_back(zero ? std::optional<std::uint64_t>(mask) : std::nullopt);
+        }
+        return masks_.emplace(key, std::move(out)).first->second;
     }
 
     bool flags_ignore(const CircuitRef& circuit) {
@@ -506,82 +691,8 @@ private:
         return ignore_.emplace(key, ok).first->second;
     }
 
-    Cond2 condition_2(const std::vector<RecordEntry>& record) {
-        const auto no = [](std::string why) { Cond2 c; c.why_not = std::move(why); return c; };
-        const std::size_t generators = dag_.code.generators.size();
-        std::vector<Round> rounds;
-        bool readable = true;
-        for (std::size_t i = 0; i < record.size(); ++i) {
-            const CircuitRef& circuit = dag_.nodes[record[i].node].circuit;
-            const auto& bits = bits_of(circuit);
-            bool overlap = rounds.empty();
-            for (const auto& b : bits) {
-                if (!b) { readable = false; continue; }
-                if (!rounds.empty() && rounds.back().syndrome.count(*b)) overlap = true;
-            }
-            if (overlap) rounds.emplace_back();
-            Round& round = rounds.back();
-            for (std::size_t j = 0; j < bits.size() && j < record[i].outcome.syndrome.size(); ++j) {
-                if (bits[j]) round.syndrome[*bits[j]] = record[i].outcome.syndrome[j];
-            }
-            for (const bool f : record[i].outcome.flag) round.flagged = round.flagged || f;
-            round.entries.push_back(i);
-        }
-        if (!readable) return no(std::string("an SE measures something other than the code's generators"));
-        if (rounds.empty()) return no("no syndrome was measured");
+    std::map<std::string, std::vector<std::optional<std::uint64_t>>> masks_;
 
-        const auto full = [&](const Round& r) { return r.syndrome.size() == generators; };
-
-        // w: the faults the record exposes. A flag is one; so is a change of
-        // syndrome between consecutive unflagged full rounds, except that the
-        // change right after another one may be the same fault seen twice.
-        // The input is a codeword up to the input error, so the first unflagged
-        // full round is compared with the trivial syndrome: a non-trivial one
-        // exposes an input error or a fault, either of which uses the budget.
-        Round baseline;
-        for (std::size_t g = 0; g < generators; ++g) baseline.syndrome[g] = false;
-        int  w = 0;
-        bool skip = false;
-        const Round* prev = &baseline;
-        for (const auto& r : rounds) {
-            if (r.flagged) { ++w; prev = nullptr; skip = false; continue; }
-            if (!full(r))  { prev = nullptr; skip = false; continue; }
-            if (prev) {
-                if (prev->syndrome != r.syndrome) {
-                    if (!skip) ++w;
-                    skip = !skip;
-                } else {
-                    skip = false;
-                }
-            }
-            prev = &r;
-        }
-
-        const int t = dag_.code.fault_budget();
-        if (w > t) return no("the record exposes " + std::to_string(w) + " faults, more than t");
-        const std::size_t need = static_cast<std::size_t>(t - w + 1);
-        if (rounds.size() < need) {
-            return no("w = " + std::to_string(w) + " needs " + std::to_string(need) +
-                      " repeated rounds, the record has " + std::to_string(rounds.size()));
-        }
-        const Round& last = rounds.back();
-        for (std::size_t i = rounds.size() - need; i < rounds.size(); ++i) {
-            const Round& r = rounds[i];
-            if (!full(r) || r.flagged || r.syndrome != last.syndrome) {
-                return no("w = " + std::to_string(w) + ", but the last " + std::to_string(need) +
-                          " rounds are not identical unflagged full rounds");
-            }
-        }
-        Cond2 form;
-        form.holds = true;
-        form.k     = t - w;
-        for (std::size_t i = rounds.size() - need; i < rounds.size(); ++i) {
-            for (const std::size_t e : rounds[i].entries) form.suffix.push_back(e);
-        }
-        return form;
-    }
-
-    std::map<std::string, std::vector<std::optional<std::size_t>>> bits_;
     std::map<std::string, bool>                                    ignore_;
 
     std::set<std::size_t> reached_;

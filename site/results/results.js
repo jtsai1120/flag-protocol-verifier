@@ -36,7 +36,7 @@
       def: 'Checking every extraction circuit once (signed Pauli propagation, no decision diagrams).' },
     { group: 'Time', key: 'validity_s', label: 'Protocol validity time', kind: 'time', validity: true,
       get: r => num(r.validity_s),
-      def: 'Control-flow conditions 1–3 at every terminal record, including the flag condition of the final rounds.' },
+      def: 'Conditions 1–3 of Def. 3.9 on every terminating path, including the flag condition of the repeated rounds.' },
     { group: 'Time', key: 'correctability_s', label: 'Correctability time', kind: 'time',
       get: r => num(r.traversal_s) === null ? null : Math.max(0, r.traversal_s - (r.validity_s || 0)),
       def: 'The traversal without the validity checks: state propagation, fault injection, measurement splitting and the final E1E2 query.' },
@@ -78,28 +78,28 @@
       def: 'Every extraction circuit is correct and deterministic. Invalid circuits are still verified as written (--skip-circuit-check) to fill the other columns.' },
     { group: 'Verdict', key: 'correctable', label: 'Correctability', kind: 'verdict',
       get: r => r.failures === undefined ? null : r.failures,
-      show: r => r.failures === undefined ? null : r.failures === 0 ? ['correctable', 'v-good'] : [`${r.failures} record${r.failures > 1 ? 's' : ''} fail, t = ${r.min_t}`, 'v-bad'],
-      def: 'No terminal record leaves two errors with the same syndrome whose product is a non-trivial logical operator.' },
+      show: r => r.failures === undefined ? null : r.failures === 0 ? ['correctable', 'v-good'] : [`${r.failures} path${r.failures > 1 ? 's' : ''} fail, t = ${r.min_t}`, 'v-bad'],
+      def: 'No measurement record leaves two residual errors whose product is a non-trivial logical operator (Thm. 3.10, Eq. 8); failures are counted by path.' },
     { group: 'Verdict', key: 'control', label: 'Protocol validity', kind: 'verdict', validity: true,
       get: r => r.invalid === undefined || r.flag_bugs === undefined ? null : (r.invalid_paths || 0) + r.flag_bugs,
       show: r => r.invalid === undefined || r.flag_bugs === undefined ? null
         : (r.invalid_paths || 0) + r.flag_bugs === 0 ? ['valid', 'v-good'] : ['not valid', 'v-bad'],
-      def: 'Valid when there are no control-flow bugs and no flag bugs (Def. 3.10; circuit validity is its own column).' },
+      def: 'Valid when there are no control-flow bugs and no flag bugs (Def. 3.9; circuit validity is its own column).' },
     { group: 'Verdict', key: 'cf_bugs', label: 'Control-flow bugs', kind: 'verdict', validity: true,
       get: r => r.invalid_paths === undefined ? null : r.invalid_paths,
       show: r => r.invalid_paths === undefined ? null : r.invalid_paths === 0 ? ['0', 'v-good']
         : [`${r.invalid_paths} path${r.invalid_paths > 1 ? 's' : ''} (${count(r.invalid)} record${r.invalid > 1 ? 's' : ''})`, 'v-bad'],
-      def: 'Paths with a terminal record that no control-flow condition settles (Def. 3.9): a decoding terminal needs Condition 1 or Condition 2, an ending terminal needs Condition 3.' },
+      def: 'Terminating paths that satisfy none of Conditions 1–3 of Def. 3.9 (a path satisfies a condition when every record on it does). A decoding path may use any of them; an ending path applies no correction, so it needs Condition 3. The count in brackets is the records on those paths.' },
     { group: 'Verdict', key: 'flag_bugs', label: 'Flag bugs', kind: 'verdict', validity: true,
       get: r => r.flag_bugs === undefined ? null : r.flag_bugs,
       show: r => r.flag_bugs === undefined ? null : r.flag_bugs === 0 ? ['0', 'v-good']
         : [`${r.flag_bugs} circuit${r.flag_bugs > 1 ? 's' : ''}`, 'v-bad'],
-      def: 'Circuits in the repeated suffix of a Condition 2 path that fail the (t − w)-flag condition (Def. 3.10 (3)), whichever condition settles the path.' },
+      def: 'Circuits in the repeated suffix of a Condition 2 path that fail the (t − m)-flag condition (Def. 3.9 (2), Def. 3.7), whichever condition settles the path.' },
 
     { group: 'Size', key: 'paths', label: 'Paths', kind: 'count', get: r => num(r.paths), def: 'Symbolic execution paths reached.' },
     { group: 'Size', key: 'records', label: 'Terminal records', kind: 'count', get: r => num(r.records), def: 'Distinct measurement records reaching a terminal.' },
     { group: 'Size', key: 'circuits', label: 'Circuits run', kind: 'count', get: r => num(r.circuits), def: 'Extraction circuits actually simulated.' },
-    { group: 'Size', key: 'cond2', label: 'Records by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Terminal records of decoding paths that Condition 1 does not settle and Condition 2 does.' },
+    { group: 'Size', key: 'cond2', label: 'Paths by Condition 2', kind: 'count', validity: true, get: r => num(r.cond2), def: 'Decoding paths that Condition 1 does not settle and Condition 2 does.' },
     { group: 'Size', key: 'fqcv_setsize_max', label: 'Largest error set', kind: 'count', get: r => num(r.fqcv_setsize_max), def: 'Elements of the largest set given to the E1E2 query.', fmt: big },
   ];
   // Columns follow the order of the checks: circuit validity, then protocol

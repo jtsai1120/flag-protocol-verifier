@@ -269,8 +269,10 @@ int main(int argc, char** argv) {
         if (result.clean()) {
             std::cout << "no unprotected path found\n";
         } else {
-            std::cout << result.failures.size() << " unprotected path(s); first failure at t = "
-                      << result.min_fault_count << "\n\n";
+            std::set<std::size_t> bad_paths;
+            for (const auto& failure : result.failures) bad_paths.insert(failure.path_id);
+            std::cout << bad_paths.size() << " unprotected path(s), " << result.failures.size()
+                      << " record(s); first failure at t = " << result.min_fault_count << "\n\n";
             for (const auto& failure : result.failures) {
                 std::cout << "  path " << failure.path_id << "  t=" << failure.failure.fault_count
                           << "  record=" << failure.record_string() << "\n";
@@ -282,7 +284,7 @@ int main(int argc, char** argv) {
 
         if (result.validity_checked) {
             std::cout << "\nprotocol validity\n"
-                      << "terminal records: Cond 1 " << result.by_condition[0] << ", Cond 2 "
+                      << "terminal paths  : Cond 1 " << result.by_condition[0] << ", Cond 2 "
                       << result.by_condition[1] << ", Cond 3 " << result.by_condition[2] << "\n";
             if (result.control_flow_valid()) {
                 std::cout << "control-flow bugs: 0 path(s)\n";
