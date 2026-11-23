@@ -44,7 +44,7 @@
     <textarea class="editor" id="editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="File contents"></textarea>
     <div class="controls">
       <label>Entry <select id="entry" aria-label="Protocol file to verify"></select></label>
-      <label>E1E2 method
+      <label title="How the last step of the correctability check (two errors with the same syndrome whose product is a logical operator) is answered">Correctability method
         <select id="fqcv">
           <option>image</option><option>table</option><option>square</option><option>bruteforce</option>
         </select>
@@ -52,8 +52,7 @@
       <label><input type="checkbox" id="first"> Stop at first failure</label>
       <label><input type="checkbox" id="dag"> Structure only</label>
       <label title="Verify the circuits as written, even if they are not valid"><input type="checkbox" id="skip-se"> Skip the circuit check</label>
-      <label>Bound <input type="number" id="bound" min="1" placeholder="auto"></label>
-      <label>Max paths <input type="number" id="max-paths" min="1" value="5000"></label>
+      <label title="Start every run from an error-free input (r = 0)"><input type="checkbox" id="no-input"> No input errors</label>
     </div>
     <p class="notice" id="estimate"></p>
   </section>

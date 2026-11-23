@@ -224,8 +224,6 @@ int main(int argc, char** argv) {
 
         if (dag_only) {
             print_dag(dag);
-            std::cout << "\nBMC bound  : " << expansion.bound
-                      << (bound ? " (given)" : " (found by doubling)") << "\n";
             report_cost(std::chrono::steady_clock::duration::zero());
             return 0;
         }
@@ -266,8 +264,6 @@ int main(int argc, char** argv) {
         std::cout << "protocol        : " << result.protocol << "\n"
                   << "code            : [[" << dag.code.n << ',' << dag.code.k << ','
                   << dag.code.d << "]], tau = " << result.tau << "\n"
-                  << "BMC bound       : " << expansion.bound
-                  << (bound ? " (given)" : " (found by doubling)") << "\n"
                   << "fqcv method     : " << spbdd_options.fqcv << "\n"
                   << "input errors    : " << (spbdd_options.input_errors ? "r + s <= tau" : "none (r = 0)")
                   << "\n"

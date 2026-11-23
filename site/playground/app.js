@@ -341,8 +341,7 @@
     if ($('first').checked) args.push('--first');
     if ($('dag').checked) args.push('--dag');
     if ($('skip-se').checked) args.push('--skip-circuit-check');
-    if ($('bound').value) args.push('--bound=' + parseInt($('bound').value, 10));
-    if ($('max-paths').value) args.push('--max-paths=' + parseInt($('max-paths').value, 10));
+    if ($('no-input').checked) args.push('--no-input-errors');
 
     out.textContent = '';
     line('$ ' + args.map(a => /[\s\[\]^]/.test(a) ? `"${a}"` : a).join(' ').replace('/w/', ''), 'sys');

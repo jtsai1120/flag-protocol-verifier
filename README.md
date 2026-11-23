@@ -233,30 +233,39 @@ record is listed. `--no-input-errors` keeps only r = 0.
 
 Protocol validity (Def. 3.9) is checked per terminating execution. Each
 measurement record is regrouped into rounds (a round ends where a generator
-is about to be measured again), and its **detected faults** w are counted
-after CB18 (Secs. 2.2 and 3.1): every SE circuit of a round that raises a flag
-is one, and an unflagged round that disagrees with what is known of the
-syndrome is one, except right after another counted disagreement (it may be
-the same fault seen twice). What is known starts as the trivial syndrome and
-is kept as GF(2) equations over the generators, so a bit that measures a
-product of generators (fig6) is compared too; after a flag nothing earlier is
-trusted, after a disagreement only the new round.
+is about to be measured again), and the **circuit faults it proves** are
+counted after CB18 (Secs. 2.2 and 3.1): every SE circuit of a round that
+raises a flag is one, and an unflagged round that disagrees with an earlier
+measurement of the same syndrome is one, except right after another counted
+disagreement (it may be the same fault seen twice). A first measurement is
+never compared with the trivial syndrome: an input error could explain it,
+and Def. 3.9 counts detected faults. What is known of the syndrome is kept
+as GF(2) equations over the generators, so a bit that measures a product of
+generators (fig6) is compared too; after a flag nothing earlier is trusted,
+after a disagreement only the new round.
 
 | Condition | Checked |
 |---|---|
-| 1 | w ≥ t, and every error in E_m has the same ideal syndrome (no generator splits E_m; this is φ_CF1 of Eq. 14) |
-| 2 | at least m < t detected faults (m = min(w, t − 1)), then t − m + 1 identical, unflagged full rounds; the guards must force them: every record of the same FPDL path with the same min(w, t) has them |
+| 1 | the record proves w ≥ t circuit faults, and every error of level (0, t) has the same ideal syndrome (no generator splits it; φ_CF1 of Eq. 14). With k = t proved, g + k ≤ t leaves no input error, so (0, t) is all of E_m for that record |
+| 2 | at least m < t detected faults, then t − m + 1 identical, unflagged full rounds, which the guards must force: every record of the same FPDL path whose rounds before those t − m + 1 prove exactly m faults (at least t when m = t − 1 and the record proves t) has them |
 | 3 | every error from input weight r and s faults, r + s ≤ t, is within weight s of the code space |
 
 A `decode(...)` terminal may be settled by any condition: Thm. 3.10 builds the
 decoder, and under Condition 3 it applies no correction. An `end()` terminal
 applies no correction by construction, so only Condition 3 can settle it
-(Sec. 4.1.3). The paper's experiments try only Condition 1 at decoding
-terminals; `--decode-needs-cond12` does the same, and the report always
-shows that count too. An FPDL path is a **control-flow bug** when one of its
-records satisfies no condition; Def. 3.9 speaks of decision-tree paths, and
-an FPDL path can merge executions such a tree keeps apart (a guard on a
-counter), so each record is treated as a path of the finest tree.
+(Sec. 4.1.3). `--decode-needs-cond12` keeps Condition 3 away from decoding
+terminals, and the report always shows that count too. An FPDL path is a
+**control-flow bug** when one of its records satisfies no condition; Def. 3.9
+speaks of decision-tree paths, and an FPDL path can merge executions such a
+tree keeps apart (a guard on a counter), so each record is treated as a path
+of the finest tree. `--by-path` lists, for every path, how many of its records
+satisfy each condition.
+
+This is Def. 3.9 as written. The paper's own experiments do not check the
+"t faults detected" part of Condition 1 (they classify paths by shape), so a
+protocol that decodes after one nontrivial syndrome, with no fault proved,
+is valid in Table 1 but not here when an input error alone can reach that
+record and leave a residual error that Condition 3 does not allow.
 
 **Flag bugs** (Def. 3.9 (2)), counted in circuits. Wherever Condition 2 holds,
 the circuits of the repeated suffix must satisfy the (t − m)-flag condition
