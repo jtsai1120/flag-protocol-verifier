@@ -33,13 +33,21 @@ window.CircuitView = (() => {
       }
     }
     const labelW = Math.max(...rows.map(r => DT.width(r.name, 12, '"IBM Plex Mono", monospace'))) + 22;
-    const x0 = labelW + 18;
-    const y = r => TOP + r * ROW;
+    const hasInput = opts.input && /[XYZ]/.test(opts.input);
+    const x0 = labelW + 18 + (hasInput ? 26 : 0);
+    const top = TOP + (circuit.ops.some(op => op.kind === 'step') ? 26 : 0);
+    const y = r => top + r * ROW;
 
     // Columns.
     const last = new Array(rows.length).fill(-1);
     const placed = [];
     for (const op of circuit.ops) {
+      if (op.kind === 'step') {
+        const c = Math.max(...last) + 1;
+        last.fill(c);
+        placed.push({ col: c, rows: [] });
+        continue;
+      }
       if (op.kind === 'barrier') {
         const c = Math.max(...last);
         last.fill(c);
@@ -76,9 +84,19 @@ window.CircuitView = (() => {
       if (!p) return;
       const cx = x0 + p.col * COL;
       const [a, b] = p.rows;
+      if (op.kind === 'step') {
+        svg('line', { x1: cx, x2: cx, y1: top - 30, y2: y(rows.length - 1) + 12, class: 'step-line' }, gates);
+        svg('text', { x: cx + 4, y: top - 32, class: 'step-label' }, gates).textContent = op.label;
+        if (op.sub) DT.richText(gates, op.sub, { x: cx + 4, y: top - 19, class: 'step-sub' });
+        return;
+      }
       if (op.kind === 'measure') {
         box(cx, y(a), 'M', 'meas');
-        svg('text', { x: cx, y: y(a) + BOX / 2 + 10, 'text-anchor': 'middle', class: 'gsub' }, gates).textContent = op.target;
+        if (op.value !== undefined) {
+          svg('text', { x: cx, y: y(a) + BOX / 2 + 11, 'text-anchor': 'middle', class: 'gval' + (op.value ? ' one' : '') }, gates).textContent = op.value ? '1' : '0';
+        } else {
+          svg('text', { x: cx, y: y(a) + BOX / 2 + 10, 'text-anchor': 'middle', class: 'gsub' }, gates).textContent = op.target;
+        }
       } else if (op.kind === 'reset') {
         box(cx, y(a), '0', 'reset');
       } else if (p.rows.length === 1) {
@@ -102,21 +120,32 @@ window.CircuitView = (() => {
     // Faults: after their gate, a letter on each qubit it acts on.
     const marks = svg('g', { class: 'faults' }, g);
     let focus = null;
+    const badge = (cx, cy, letter, cls, title) => {
+      const m = svg('g', { class: 'fault ' + (cls || '') }, marks);
+      svg('rect', { x: cx - 7, y: cy - 8, width: 14, height: 16, rx: 3 }, m);
+      svg('text', { x: cx, y: cy + 4, 'text-anchor': 'middle' }, m).textContent = letter;
+      svg('title', {}, m).textContent = title || '';
+    };
+    // Input errors, before the first column, one per witness side by side.
+    (opts.inputs || (hasInput ? [{ pauli: opts.input, cls: opts.inputCls }] : [])).forEach((inp, k, all) => {
+      const cx = labelW + 28 + (all.length > 1 ? (k ? 8 : -8) : 0);
+      [...inp.pauli].forEach((ch, q) => {
+        const r = rowOf.get(`${rows.length && rows[0].name.split('[')[0]}[${q}]`);
+        if (ch !== 'I' && r !== undefined) badge(cx, y(r), ch, inp.cls, `input error ${inp.pauli}`);
+      });
+    });
     for (const f of opts.faults || []) {
       const p = placed[f.instruction];
       if (!p) continue;
-      const cx = x0 + p.col * COL + COL / 2;
+      const cx = x0 + p.col * COL + COL / 2 + (f.slot || 0) * 8;
       const rs = f.qubits.map(q => rowOf.get(q));
       rs.forEach((r, j) => {
         if (r === undefined || f.pauli[j] === 'I') return;
-        const m = svg('g', { class: 'fault ' + (f.cls || '') }, marks);
-        svg('rect', { x: cx - 8, y: y(r) - 8, width: 16, height: 16, rx: 3 }, m);
-        svg('text', { x: cx, y: y(r) + 4, 'text-anchor': 'middle' }, m).textContent = f.pauli[j];
-        svg('title', {}, m).textContent = f.title || '';
+        badge(cx, y(r), f.pauli[j], f.cls, f.title);
       });
-      const top = Math.min(...rs.filter(r => r !== undefined));
+      const topRow = Math.min(...rs.filter(r => r !== undefined));
       if (f.label) {
-        const t = svg('text', { x: cx, y: y(top) - 12, 'text-anchor': 'middle', class: 'fault-label ' + (f.cls || '') }, marks);
+        const t = svg('text', { x: cx, y: y(topRow) - 12, 'text-anchor': 'middle', class: 'fault-label ' + (f.cls || '') }, marks);
         t.textContent = f.label;
       }
       focus = focus ? { x: Math.min(focus.x, cx - 200), y: 0, w: Math.max(focus.x + focus.w, cx + 200) - Math.min(focus.x, cx - 200), h: dims.height }

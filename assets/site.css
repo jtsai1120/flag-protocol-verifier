@@ -283,6 +283,11 @@ input[type="number"] { width: 6.5rem; }
 .circuit-svg .gline { stroke: var(--ink); stroke-width: 1.2; }
 .circuit-svg .dot { fill: var(--ink); }
 .circuit-svg .oplus { fill: var(--panel); stroke: var(--ink); stroke-width: 1.2; }
+.circuit-svg .step-line { stroke: var(--rule); stroke-width: 1.4; stroke-dasharray: 4 3; }
+.circuit-svg .step-label { font: 600 11px var(--serif); fill: var(--ink); }
+.circuit-svg .step-sub { font: 10px var(--serif); fill: var(--muted); }
+.circuit-svg .gval { font: 600 10px var(--mono); fill: var(--muted); }
+.circuit-svg .gval.one { fill: var(--x); }
 .circuit-svg .fault text { font: 600 11px var(--mono); fill: #fff; }
 .circuit-svg .fault-label { font: 600 10px var(--serif); }
 .circuit-svg .fault-label.w1 { fill: var(--z); }
