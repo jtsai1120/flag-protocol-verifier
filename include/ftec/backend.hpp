@@ -100,7 +100,7 @@ public:
 
     // What protocol validity (Def. 3.9 of the verification paper) asks of the
     // residual errors at a terminal:
-    //   same_syndrome   Condition 1: every error of level (0, t) has the same ideal syndrome;
+    //   same_syndrome   Condition 1: every error of the levels with r + s = t has the same ideal syndrome;
     //   weight_bounded  Condition 3: every error from an input of weight r and
     //                   s faults has minimum weight at most s.
     // `syndrome_detail` and `weight_detail` name witnesses when the
@@ -110,7 +110,7 @@ public:
         bool        weight_bounded = false;
         std::string syndrome_detail;
         std::string weight_detail;
-        std::vector<std::string> syndrome_witnesses;   // two errors of level (0, t), data qubits
+        std::vector<std::string> syndrome_witnesses;   // two errors with r + s = t, data qubits
         std::string weight_witness;                    // data qubits
         int         weight_r = 0, weight_s = 0;        // its level
     };

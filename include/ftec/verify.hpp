@@ -63,7 +63,7 @@ struct ValidityFailure {
     std::string              why1, why2, why3;
     int                      detected = 0;
     std::vector<RoundSummary> rounds;
-    std::vector<Provenance>  split;           // Cond 1: two errors of level (0, t) a generator tells apart
+    std::vector<Provenance>  split;           // Cond 1: two errors with r + s = t a generator tells apart
     std::optional<Provenance> heavy;          // Cond 3: an error too far from the code space
 
     [[nodiscard]] std::string record_string() const;

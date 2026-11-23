@@ -245,13 +245,13 @@ public:
         pset all = ctx_->empty();
         for (const auto& level : state) all = all | level;
 
-        // Condition 1: no generator splits the residual errors of level
-        // (0, t). Cond 1 applies only to records that prove t circuit faults
-        // happened, and every execution behind such a record has k = t and
-        // no input error (g + k <= t), so (0, t) is all of E_m there.
+        // Condition 1: no generator splits the residual errors of the levels
+        // with r + s = t. Cond 1 applies to records that detect t faults, an
+        // input error counted as faults, so every execution behind such a
+        // record uses the whole budget.
         pset top = ctx_->empty();
         for (std::size_t i = 0; i < state.size(); ++i) {
-            if (levels_[i].first == 0 && levels_[i].second == tau_) top = state[i];
+            if (levels_[i].first + levels_[i].second == tau_) top = top | state[i];
         }
         facts.same_syndrome = true;
         for (const auto& g : generators_) {

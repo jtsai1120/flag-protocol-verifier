@@ -397,9 +397,9 @@ private:
     // ---- protocol validity (Def. 3.9) ---------------------------------------
     //
     // Every record that reaches a terminal must satisfy one of:
-    //   Cond 1  the record proves t circuit faults, and the residual errors of
-    //           the record have one ideal syndrome (phi_CF1 of Eq. 14 is
-    //           unsat). With k = t proved, g + k <= t leaves only level (0, t);
+    //   Cond 1  the record shows t detected faults, input errors counted as
+    //           faults (r + s = t), and the residual errors of the levels with
+    //           r + s = t have one ideal syndrome (phi_CF1 of Eq. 14 is unsat);
     //   Cond 2  at least m < t detected faults, then t - m + 1 consecutive
     //           identical, unflagged full rounds (structural, no faults searched);
     //   Cond 3  every residual error from input weight r and s faults,
@@ -411,8 +411,8 @@ private:
     // repeated suffix must satisfy the (t - m)-flag condition, whichever
     // condition settles the records.
 
-    // Circuit faults the record proves (detected-fault lower bound, after
-    // CB18 Secs. 2.2 and 3.1). The measurements are grouped into rounds (a
+    // Faults the record detects (lower bound, after CB18 Secs. 2.2 and 3.1),
+    // an input error counted as faults like a circuit fault (r + s). The measurements are grouped into rounds (a
     // round ends when a generator is about to be measured again). Each SE
     // circuit of a round that raises a flag is one detected fault (one fault
     // sits in one circuit, and data errors raise no flag); afterwards nothing
@@ -420,11 +420,12 @@ private:
     // earlier measurement of the same syndrome is one detected fault, except
     // the disagreement right after a counted one, which may be the same fault
     // seen twice (CB18's rule for consecutive rounds); after a disagreement
-    // only the new round is trusted. A first measurement is never compared
-    // with the trivial syndrome: an input error could explain it, and only
-    // circuit faults count (Def. 3.9). Knowledge is kept as GF(2) equations
-    // over the generators, so a bit that measures a product of generators is
-    // compared too.
+    // only the new round is trusted. Before anything is measured the syndrome
+    // is known to be trivial (the input is a codeword up to the input error),
+    // so a first nontrivial measurement is one detected fault, whether an
+    // input error or a circuit fault caused it. Knowledge is kept as GF(2)
+    // equations over the generators, so a bit that measures a product of
+    // generators is compared too.
     struct Exposure {
         int                      w = 0;
         std::vector<std::size_t> round_of;   // record entry -> round index
@@ -472,6 +473,7 @@ private:
         }
         // count
         std::vector<std::pair<std::uint64_t, bool>> known;   // reduced rows
+        for (std::size_t g = 0; g < r; ++g) known.emplace_back(std::uint64_t{1} << g, false);
         bool skip = false;
         ex.w_upto.push_back(0);
         for (const auto& round : ex.rounds) {
@@ -561,7 +563,7 @@ private:
         const auto steps = steps_of(failure.record);
         if (!facts.same_syndrome) {
             for (const auto& w : facts.syndrome_witnesses) {
-                failure.split.push_back(backend_.explain(steps, w, [t](int r, int s) { return r == 0 && s == t; }));
+                failure.split.push_back(backend_.explain(steps, w, [t](int r, int s) { return r + s == t; }));
             }
         }
         if (!facts.weight_bounded) {
@@ -674,7 +676,7 @@ private:
         path.needing.push_back(Needing{with_form, by3});
         if (path.needing_examples.size() < 1 && !by3) {
             const std::string why1 = !facts.same_syndrome ? facts.syndrome_detail
-                : "the record proves " + std::to_string(ex.w) + " circuit fault(s), fewer than t = " + std::to_string(t);
+                : "the record detects " + std::to_string(ex.w) + " fault(s), fewer than t = " + std::to_string(t);
             const std::string why2 = !ex.readable
                 ? std::string("an SE measures something that is not a product of the code's generators")
                 : with_form ? std::string("the guards do not force the repeated rounds (other records of this path in the same class do not repeat)")
