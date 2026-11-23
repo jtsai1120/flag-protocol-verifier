@@ -507,6 +507,68 @@
     }
   }
 
+  // The circuits of a record (or of some of its steps) run one after
+  // another as one drawing: data wires shared, each step's ancillas on wires
+  // by role, every measurement showing what the record read. `index` maps
+  // "step:instruction" to the operation in the drawing.
+  function pathCircuit(record, steps) {
+    const ROLE = { data: 'data', syndrome: 'syn', flag: 'flag' };
+    const width = { data: 0, syndrome: 0, flag: 0 };
+    const chosen = record.filter(e => !steps || steps.includes(e.step));
+    for (const e of chosen) {
+      const c = cex.circuits[e.se];
+      if (!c) continue;
+      for (const r of c.registers) if (r.role in width) width[r.role] = Math.max(width[r.role], r.width);
+    }
+    const registers = Object.keys(width).filter(k => width[k]).map(k => ({ name: ROLE[k], width: width[k], role: k }));
+    const ops = [], index = new Map();
+    for (const e of chosen) {
+      const c = cex.circuits[e.se];
+      if (!c) continue;
+      const roleOf = new Map(c.registers.map(r => [r.name, r.role]));
+      const rename = q => { const [reg, rest] = q.split('['); return (ROLE[roleOf.get(reg)] || reg) + '[' + rest; };
+      ops.push({ kind: 'step', label: `circuit ${e.step}: ${e.se}`, sub: `m${e.step}=${e.s}` + (e.f ? ` f${e.step}=${e.f}` : '') });
+      c.ops.forEach((op, i) => {
+        const o = { ...op, qubits: op.qubits.map(rename) };
+        if (op.kind === 'measure') {
+          const role = roleOf.get(op.qubits[0].split('[')[0]);
+          const bit = +op.target.split('[')[1].replace(']', '');
+          const bits = role === 'syndrome' ? e.s : role === 'flag' ? e.f : '';
+          if (bits && bit < bits.length) o.value = bits[bit] === '1';
+        }
+        index.set(`${e.step}:${i}`, ops.length);
+        ops.push(o);
+      });
+    }
+    return { file: 'record', registers, ops, index, rename: (step, q) => {
+      const e = record[step - 1], c = e && cex.circuits[e.se];
+      const roleOf = new Map(((c && c.registers) || []).map(r => [r.name, r.role]));
+      const [reg, rest] = q.split('[');
+      return (ROLE[roleOf.get(reg)] || reg) + '[' + rest;
+    } };
+  }
+
+  // One figure: the record's circuits with the given executions marked.
+  function recordFigure(container, record, title, witnesses, steps) {
+    const circuit = pathCircuit(record, steps);
+    if (!circuit.ops.length) return;
+    const faults = [], inputs = [];
+    witnesses.forEach(([w, label, cls], k) => {
+      if (!w || !w.found) return;
+      const slot = witnesses.length > 1 ? (k ? 1 : -1) : 0;
+      if (/[XYZ]/.test(w.input_error)) inputs.push({ pauli: w.input_error, cls });
+      for (const f of w.faults) {
+        const at = circuit.index.get(`${f.step}:${f.instruction}`);
+        if (at === undefined) continue;
+        faults.push({ instruction: at, pauli: f.pauli, qubits: f.qubits.map(q => circuit.rename(f.step, q)), cls, slot,
+                      label: witnesses.length > 1 ? label : '', title: `${label}: ${f.pauli} on ${f.qubits.join(', ')} after ${f.gate} #${f.instruction + 1}` });
+      }
+    });
+    const card = el('div', { className: 'tree-view circuit-card' });
+    container.append(card);
+    window.CircuitView.render(card, circuit, { title, faults, inputs });
+  }
+
   function recordHtml(record) {
     return record.map(e => `m<sub>${e.step}</sub>=${esc(e.s)}` + (e.f ? ` f<sub>${e.step}</sub>=${esc(e.f)}` : '')).join(' · ');
   }
@@ -540,14 +602,21 @@
       html.push(`<h3>Control-flow bug on path ${item.path} (${esc(item.action)})</h3>`,
         `<p>This record reaches the terminal, but it satisfies none of the three conditions of Def. 3.9, so the protocol cannot know it has seen enough to stop here.</p>`,
         `<p class="record">Record: ${recordHtml(item.record)}</p>`,
-        `<div class="cond"><h4>Condition 1 fails</h4><p>${subs(item.why1)}</p>`,
-        rounds ? `<p class="muted">Faults this record detects (input errors counted): ${item.detected} (t = ${item.t}).</p><table class="rounds"><tr><th></th><th>outcomes</th><th></th><th>faults proved</th></tr>${rounds}</table>` : '',
+        `<div class="cond" id="cond-1"><h4>Condition 1 fails</h4><p>${subs(item.why1)}</p>`,
+        rounds ? `<p class="muted">Faults this record detects (input errors counted): ${item.detected} (t = ${item.t}).</p><table class="rounds"><tr><th></th><th>outcomes</th><th></th><th>faults detected</th></tr>${rounds}</table>` : '',
         (item.split || []).map((w, i) => provenanceHtml(`Error ${i + 1} with r + s = t`, w, item.record, i ? 'w2' : 'w1')).join(''),
-        `</div><div class="cond"><h4>Condition 2 fails</h4><p>${subs(item.why2)}</p></div>`,
-        `<div class="cond"><h4>Condition 3 fails</h4><p>${subs(item.why3)}</p>`,
+        `</div><div class="cond" id="cond-2"><h4>Condition 2 fails</h4><p>${subs(item.why2)}</p></div>`,
+        `<div class="cond" id="cond-3"><h4>Condition 3 fails</h4><p>${subs(item.why3)}</p>`,
         item.heavy ? provenanceHtml('The error', item.heavy, item.record, 'w0') : '', `</div>`);
       detail.innerHTML = html.join('');
-      faultCircuits(detail, item.record, ws);
+      // One figure per condition.
+      const split = (item.split || []).map((w, i) => [w, `error ${i + 1}`, i ? 'w2' : 'w1']);
+      recordFigure($('cond-1'), item.record, split.length
+        ? 'Condition 1: two executions behind this record whose errors a generator tells apart'
+        : `Condition 1: the record, circuit by circuit, with what each measured (${item.detected} fault${item.detected === 1 ? '' : 's'} detected, t = ${item.t})`, split);
+      const lastRounds = (item.rounds || []).slice(-(item.t + 1)).flatMap(r => r.steps);
+      recordFigure($('cond-2'), item.record, 'Condition 2: the last rounds before the terminal, with what they measured', [], lastRounds.length ? lastRounds : null);
+      if (item.heavy) recordFigure($('cond-3'), item.record, 'Condition 3: an execution behind this record that leaves too heavy an error', [[item.heavy, 'C3', 'w0']]);
     } else {
       const circuit = cex.circuits[item.se];
       const w = item.witness;
